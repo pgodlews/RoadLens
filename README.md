@@ -40,6 +40,15 @@ uv run roadlens telemetry /path/to/GRMS0010.MP4 \
   --output artifacts/telemetry.json
 ```
 
+Serve the review interface with a local OpenStreetMap PMTiles archive:
+
+```bash
+uv run roadlens report artifacts/eccup \
+  --pmtiles /path/to/united-kingdom.pmtiles
+```
+
+Open `http://127.0.0.1:8765`. The report displays observation markers and segmentation evidence, supports confirm/reject review, and downloads reviewed GeoJSON. Leaflet and PMTiles JavaScript load from pinned CDN URLs; map data comes from the local archive.
+
 Run checks:
 
 ```bash
@@ -51,8 +60,8 @@ uv run ruff check .
 
 Source clips, ride telemetry, credentials, and generated analysis artifacts are excluded from Git. Do not commit private location data or footage containing identifiable people or vehicles.
 
-RoadLens source code is available under the MIT License. Meta SAM 3.1 and its checkpoints are governed separately by the [SAM License](https://github.com/facebookresearch/sam3/blob/main/LICENSE).
+RoadLens source code is available under the MIT License. Meta SAM 3.1 and its checkpoints are governed separately by the [SAM License](https://github.com/facebookresearch/sam3/blob/main/LICENSE). Prior-work attribution is recorded in `NOTICE`.
 
 ## Development history
 
-Development started from an empty repository on 1 November 2026. Commit history records the implementation as it is built and validated during the hackathon.
+Development started from an empty repository on 1 November 2026. Commit history records the implementation as it is built and validated during the hackathon. See the [development log](docs/development-log.md) for real-footage experiments, negative results, prior-work attribution, and hosted-API verification status.

@@ -10,6 +10,7 @@ from roadlens.analysis import build_observations, write_observations
 from roadlens.backends import create_backend
 from roadlens.media import prepare_analysis_clip, probe_video
 from roadlens.output import write_frame_result
+from roadlens.report import serve_report
 from roadlens.telemetry import read_garmin_telemetry
 
 
@@ -53,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     telemetry.add_argument("video", type=Path)
     telemetry.add_argument("--output", type=Path, required=True)
+
+    report = commands.add_parser("report", help="Serve the local OSM review report")
+    report.add_argument("output", type=Path)
+    report.add_argument("--pmtiles", type=Path, required=True)
+    report.add_argument("--host", default="127.0.0.1")
+    report.add_argument("--port", type=int, default=8765)
     return parser
 
 
@@ -135,6 +142,8 @@ def main() -> None:
             f"Saved {len(result.samples)} GPS fixes; "
             f"rejected {result.rejected_samples} invalid sample(s)"
         )
+    elif args.command == "report":
+        serve_report(args.output, args.pmtiles, args.host, args.port)
 
 
 if __name__ == "__main__":

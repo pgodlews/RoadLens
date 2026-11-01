@@ -18,6 +18,7 @@ class Observation:
     first_source_seconds: float
     last_source_seconds: float
     best_source_seconds: float
+    best_frame_index: int
     recorded_utc: datetime
     score: float | None
     foreground_pixels: int
@@ -35,6 +36,7 @@ class Observation:
             "first_source_seconds": self.first_source_seconds,
             "last_source_seconds": self.last_source_seconds,
             "best_source_seconds": self.best_source_seconds,
+            "best_frame_index": self.best_frame_index,
             "recorded_utc": self.recorded_utc.isoformat(),
             "score": self.score,
             "foreground_pixels": self.foreground_pixels,
@@ -83,6 +85,7 @@ def build_observations(
                 last_source_seconds=clip_start_seconds
                 + max(frame.frame_index for frame, _ in items) / clip_fps,
                 best_source_seconds=best_source_seconds,
+                best_frame_index=best_frame.frame_index,
                 recorded_utc=recorded_utc,
                 score=best.score,
                 foreground_pixels=int(best.mask.sum()),
