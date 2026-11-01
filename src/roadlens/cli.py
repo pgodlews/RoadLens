@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+from datetime import datetime
 from pathlib import Path
 
+from roadlens.analysis import build_observations, write_observations
 from roadlens.backends import create_backend
+from roadlens.media import prepare_analysis_clip, probe_video
 from roadlens.output import write_frame_result
+from roadlens.telemetry import read_garmin_telemetry
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +30,29 @@ def build_parser() -> argparse.ArgumentParser:
     segment.add_argument("--confidence", type=float, default=0.5)
     segment.add_argument("--max-frames", type=int)
     segment.add_argument("--output", type=Path, required=True)
+
+    analyze = commands.add_parser(
+        "analyze", help="Create GPS-linked hazard observations from a Garmin clip"
+    )
+    analyze.add_argument("video", type=Path)
+    analyze.add_argument("--prompt", default="pothole")
+    analyze.add_argument("--backend", choices=("local", "remote"), default="local")
+    analyze.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=os.environ.get("ROADLENS_SAM_CHECKPOINT"),
+    )
+    analyze.add_argument("--confidence", type=float, default=0.5)
+    analyze.add_argument("--start", type=float, default=0)
+    analyze.add_argument("--duration", type=float, default=10)
+    analyze.add_argument("--fps", type=float, default=5)
+    analyze.add_argument("--output", type=Path, required=True)
+
+    telemetry = commands.add_parser(
+        "telemetry", help="Extract timed Garmin GPS from a video"
+    )
+    telemetry.add_argument("video", type=Path)
+    telemetry.add_argument("--output", type=Path, required=True)
     return parser
 
 
@@ -50,6 +78,62 @@ def main() -> None:
             )
         print(
             f"Saved {count} frame result(s), {detections} detection(s) to {args.output}"
+        )
+    elif args.command == "analyze":
+        metadata = probe_video(args.video)
+        if not metadata["creation_time"]:
+            raise ValueError("The Garmin video has no recording creation time")
+        clip_created = datetime.fromisoformat(
+            metadata["creation_time"].replace("Z", "+00:00")
+        )
+        telemetry = read_garmin_telemetry(args.video)
+        working_clip = args.output / "analysis.mp4"
+        prepare_analysis_clip(
+            args.video,
+            working_clip,
+            args.start,
+            args.duration,
+            args.fps,
+        )
+        backend = create_backend(
+            args.backend,
+            checkpoint_path=args.checkpoint,
+            confidence_threshold=args.confidence,
+        )
+        frames = []
+        for result in backend.segment_video(working_clip, args.prompt):
+            frames.append(result)
+            if result.detections:
+                write_frame_result(working_clip, result, args.output)
+            print(
+                f"frame={result.frame_index} detections={len(result.detections)}",
+                flush=True,
+            )
+        observations = build_observations(
+            frames, telemetry.samples, clip_created, args.start, args.fps
+        )
+        write_observations(observations, args.video, args.output)
+        print(f"Saved {len(observations)} unreviewed observation(s) to {args.output}")
+    elif args.command == "telemetry":
+        result = read_garmin_telemetry(args.video)
+        payload = {
+            "samples": [
+                {
+                    "recorded_utc": sample.recorded_utc.isoformat(),
+                    "latitude": sample.latitude,
+                    "longitude": sample.longitude,
+                    "speed_mps": sample.speed_mps,
+                    "playback_seconds": sample.playback_seconds,
+                }
+                for sample in result.samples
+            ],
+            "rejected_samples": result.rejected_samples,
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(
+            f"Saved {len(result.samples)} GPS fixes; "
+            f"rejected {result.rejected_samples} invalid sample(s)"
         )
 
 

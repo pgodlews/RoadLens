@@ -16,7 +16,17 @@ roadlens = "roadlens.cli:main"
 [project.optional-dependencies]
 local = [
     "sam3 @ git+https://github.com/facebookresearch/sam3.git",
+    "decord",
+    "einops",
+    "hydra-core",
+    "opencv-python-headless",
+    "psutil",
+    "pycocotools",
+    "scikit-image",
+    "scipy",
+    "setuptools<81",
     "torch==2.10.0",
+    "torchcodec",
     "torchvision",
 ]
 remote = [

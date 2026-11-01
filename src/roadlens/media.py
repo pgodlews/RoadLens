@@ -1,9 +1,10 @@
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 
-def probe_video(video_path: Path) -> dict[str, float | int]:
+def probe_video(video_path: Path) -> dict[str, Any]:
     completed = subprocess.run(
         [
             "ffprobe",
@@ -12,7 +13,10 @@ def probe_video(video_path: Path) -> dict[str, float | int]:
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height,r_frame_rate:format=duration",
+            (
+                "stream=width,height,r_frame_rate:"
+                "format=duration:format_tags=creation_time"
+            ),
             "-of",
             "json",
             str(video_path),
@@ -29,7 +33,47 @@ def probe_video(video_path: Path) -> dict[str, float | int]:
         "height": int(stream["height"]),
         "duration": float(data["format"]["duration"]),
         "fps": float(numerator) / float(denominator),
+        "creation_time": data["format"].get("tags", {}).get("creation_time"),
     }
+
+
+def prepare_analysis_clip(
+    source: Path,
+    output: Path,
+    start_seconds: float,
+    duration_seconds: float,
+    fps: float,
+    width: int = 1280,
+) -> None:
+    if start_seconds < 0 or duration_seconds <= 0 or fps <= 0 or width <= 0:
+        raise ValueError("Clip timing, frame rate, and width must be positive")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            str(start_seconds),
+            "-t",
+            str(duration_seconds),
+            "-i",
+            str(source),
+            "-vf",
+            f"fps={fps},scale={width}:-2",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "20",
+            "-y",
+            str(output),
+        ],
+        check=True,
+    )
 
 
 def extract_frame(video_path: Path, frame_index: int, output_path: Path) -> None:

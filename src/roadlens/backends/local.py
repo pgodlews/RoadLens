@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import time
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
+from types import MethodType
 from typing import Any
 
 import numpy as np
@@ -27,6 +30,11 @@ class LocalSamBackend:
             use_fa3=False,
             compile=False,
             default_output_prob_thresh=confidence_threshold,
+        )
+        # SAM 3.1's shared base passes a state-offload argument its multiplex
+        # model does not accept. Keep the compatibility adapter in RoadLens.
+        self._predictor.start_session = MethodType(
+            _start_multiplex_session, self._predictor
         )
 
     def segment_video(
@@ -105,6 +113,32 @@ class LocalSamBackend:
             backend=LocalSamBackend.name,
             detections=tuple(detections),
         )
+
+
+def _start_multiplex_session(
+    predictor,
+    resource_path,
+    session_id=None,
+    offload_video_to_cpu=False,
+    offload_state_to_cpu=False,
+):
+    if offload_state_to_cpu:
+        raise ValueError("SAM 3.1 multiplex does not support state CPU offload")
+    init_kwargs = {
+        "resource_path": resource_path,
+        "offload_video_to_cpu": offload_video_to_cpu,
+    }
+    if hasattr(predictor, "async_loading_frames"):
+        init_kwargs["async_loading_frames"] = predictor.async_loading_frames
+    inference_state = predictor.model.init_state(**init_kwargs)
+    session_id = session_id or str(uuid.uuid4())
+    predictor._all_inference_states[session_id] = {
+        "state": inference_state,
+        "session_id": session_id,
+        "start_time": time.time(),
+        "last_use_time": time.time(),
+    }
+    return {"session_id": session_id}
 
 
 def _numpy(value: Any) -> np.ndarray:
