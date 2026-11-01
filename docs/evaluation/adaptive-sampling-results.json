@@ -1,0 +1,72 @@
+{
+  "hardware": "NVIDIA RTX 3090, 24 GB",
+  "method": "Single diagnostic trials, serial PNG encoding; 64-frame sessions, 8-frame overlap, 4-frame grounding batch. No labelled recall/precision benchmark.",
+  "runs": [
+    {
+      "run": "distance-native",
+      "source_video": "GRMS0012.MP4",
+      "start_seconds": 480.0,
+      "duration_seconds": 6.0,
+      "sampling": "distance",
+      "native_resolution": [
+        2688,
+        2160
+      ],
+      "overlap_frames": 8,
+      "thresholds": {
+        "output": 0.25,
+        "detection": 0.25,
+        "new_object": 0.35,
+        "image_only": 0.25
+      },
+      "coverage": {
+        "native_frames": 180,
+        "selected_frames": 49,
+        "max_selected_time_gap_seconds": 0.13347777777778447,
+        "integrated_known_distance_m": 48.06064454400008,
+        "max_known_distance_gap_m": 1.0740583040000538,
+        "selected_frames_without_speed": 0,
+        "note": "Integrated speed, not surveyed distance; excludes unknown speed."
+      },
+      "preparation_seconds": 12.285727325011976,
+      "model_load_seconds": 12.490151879028417,
+      "inference_seconds": 49.26968145172577,
+      "wall_seconds": 122.32417840999551,
+      "inferred_frames_including_overlap": 230,
+      "unreviewed_tracks": 7
+    },
+    {
+      "run": "all-native",
+      "source_video": "GRMS0012.MP4",
+      "start_seconds": 480.0,
+      "duration_seconds": 6.0,
+      "sampling": "all",
+      "native_resolution": [
+        2688,
+        2160
+      ],
+      "overlap_frames": 8,
+      "thresholds": {
+        "output": 0.25,
+        "detection": 0.25,
+        "new_object": 0.35,
+        "image_only": 0.25
+      },
+      "coverage": {
+        "native_frames": 180,
+        "selected_frames": 180,
+        "max_selected_time_gap_seconds": 0.03337777777778683,
+        "integrated_known_distance_m": 48.06064454400008,
+        "max_known_distance_gap_m": 0.2685816320000729,
+        "selected_frames_without_speed": 0,
+        "note": "Integrated speed, not surveyed distance; excludes unknown speed."
+      },
+      "preparation_seconds": 36.46056278294418,
+      "model_load_seconds": 12.408780139987357,
+      "inference_seconds": 42.9952424117364,
+      "wall_seconds": 107.7857772220159,
+      "inferred_frames_including_overlap": 204,
+      "unreviewed_tracks": 7
+    }
+  ]
+}

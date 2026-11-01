@@ -65,3 +65,29 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
 - Ran all six published images through local SAM 3.1 with `pothole`, `cracking`, and `damaged asphalt` prompts at threshold 0.1, for 18 completed image/prompt combinations.
 - The second return image produced one `pothole` mask with score 0.7460. The 964-pixel mask tightly covers the isolated mid-distance defect. All other combinations returned no detections.
 - This is the first confirmed useful pothole segmentation in the evaluation, but it does not establish reliable general detection. The result and comparison with Glimmer's broader candidate boxes are recorded in `docs/sam-image-evaluation.md`.
+
+### Independent video coverage and distance sampling
+
+- Reviewed saved experiments and found no complete frame-by-frame pothole survey.
+  Nearest-fix selection at user-supplied map pins could choose a poor forward-camera
+  view, even if a pin were accurate. New scans use road-wide time intervals with
+  margins instead of pothole-location pins.
+- Added `roadlens scan`: speed-integrated distance sampling, bounded local sharpness
+  selection, exact source presentation timestamps, overlapping SAM sessions and
+  native-frame refinement around candidates. It exports per-frame empty results,
+  timing/coverage manifests, reviewable observations and best-frame evidence.
+- Exposed SAM's separate detection/new-object thresholds; the earlier output-only
+  confidence sweep did not lower these internal admission thresholds. Corrected
+  handling of propagated frame zero, which can differ from the initial prompt.
+- A 49-frame trial exhausted GPU memory at the upstream 16-frame grounding batch.
+  Four-frame batches completed successfully on the RTX 3090.
+- Compared distance sampling plus refinement with every native frame on six seconds
+  of the return footage. The adaptive run took 122.3 s versus 107.8 s for full-frame
+  processing because refinement covered almost the entire diagnostic section.
+  Both yielded seven unreviewed tracks; visual inspection includes repaired/patchy
+  regions, so this is not seven confirmed potholes or a precision/recall result.
+- Parallelized lossless PNG writing after observing significant preprocessing cost.
+  Added failure manifests and coverage checks; 28 tests and Ruff pass.
+- Detailed methods, settings, limitations and subsequent road-wide results are
+  maintained in `docs/adaptive-sampling.md`; aggregate diagnostic timings are in
+  `docs/evaluation/adaptive-sampling-results.json`.
