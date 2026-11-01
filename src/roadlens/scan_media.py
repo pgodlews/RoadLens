@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -65,27 +67,40 @@ def save_selected_frames(
     output.mkdir(parents=True, exist_ok=True)
     paths = []
     index = 0
-    for seconds, frame in decode_frames(
-        source,
-        choices[0].source_seconds,
-        choices[-1].source_seconds + 0.1,
-    ):
-        wanted = choices[index].source_seconds
-        if seconds < wanted - 1e-6:
-            continue
-        if abs(seconds - wanted) > 1e-6:
-            raise ValueError(f"Could not recover source PTS {wanted}; got {seconds}")
-        if width and width < frame.width:
-            height = round(frame.height * width / frame.width)
-            frame = frame.reformat(width=width, height=height)
-        pixels = frame.to_ndarray(format="bgr24")
-        path = output / f"{index:06d}.png"
+    pending = deque()
+
+    def write(path, pixels):
         if not cv2.imwrite(str(path), pixels, [cv2.IMWRITE_PNG_COMPRESSION, 1]):
             raise OSError(f"Could not write {path}")
-        paths.append(path)
-        index += 1
-        if index == len(choices):
-            break
+
+    # Bound queued native images: unbounded futures can exhaust host memory.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for seconds, frame in decode_frames(
+            source,
+            choices[0].source_seconds,
+            choices[-1].source_seconds + 0.1,
+        ):
+            wanted = choices[index].source_seconds
+            if seconds < wanted - 1e-6:
+                continue
+            if abs(seconds - wanted) > 1e-6:
+                raise ValueError(
+                    f"Could not recover source PTS {wanted}; got {seconds}"
+                )
+            if width and width < frame.width:
+                height = round(frame.height * width / frame.width)
+                frame = frame.reformat(width=width, height=height)
+            pixels = frame.to_ndarray(format="bgr24")
+            path = output / f"{index:06d}.png"
+            pending.append(pool.submit(write, path, pixels))
+            if len(pending) >= 8:
+                pending.popleft().result()
+            paths.append(path)
+            index += 1
+            if index == len(choices):
+                break
+        for future in pending:
+            future.result()
     if index != len(choices):
         raise ValueError("Video ended before all selected timestamps were recovered")
     return paths

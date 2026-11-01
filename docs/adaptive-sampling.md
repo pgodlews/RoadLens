@@ -78,3 +78,37 @@ At this implementation checkpoint, 26 tests pass and Ruff passes. Tests include
 real encoded-video timestamp/extraction round trips and a fake-inference end-to-end
 scan covering refinement, empty results, evidence export and overlap deduplication.
 They verify plumbing, not real-world pothole recall. GPU benchmarks follow below.
+
+## First measured comparison
+
+On the RTX 3090, `GRMS0012.MP4` from 480–486 s contains 180 native frames
+and approximately 48.1 m of travel. This diagnostic section deliberately includes
+the earlier positive example; it is not an unbiased road-wide evaluation.
+Both runs used native 2688×2160 evidence, the thresholds above, four-frame grounding
+batches, 64-frame sessions and **eight-frame overlap** (the initial trial setting).
+
+| Method | First-pass frames | Inferences including overlap/refinement | SAM time | Total wall time | Unreviewed tracks |
+|---|---:|---:|---:|---:|---:|
+| One metre + refinement | 49 | 230 | 49.3 s | 122.3 s | 7 |
+| Every native frame | 180 | 204 | 43.0 s | 107.8 s | 7 |
+
+The distance-only first pass took 11.8 s of SAM time and produced detections at
+21 sampled timestamps. Its merged refinement interval covered 5.52 of the six
+seconds, so the adaptive workflow performed more total work than the full-frame
+run. This is an expected failure mode on densely damaged or patchy road.
+Matching track counts do not establish matching defects, recall, or precision.
+Visual review of the adaptive contact sheet shows several repaired/patchy regions;
+these are **not seven confirmed potholes**.
+
+Model loading took about 12.5 s per run. Preparing native input frames took 12.3 s
+for the sampled run and 36.5 s for the full-frame run. Total wall time also includes
+fine-frame extraction, mask serialization and evidence export. These single runs
+are illustrative, not statistically stable performance measurements.
+
+After this comparison, PNG writing was parallelized using four workers with a
+bounded eight-frame queue. This preserves native pixels while reducing serial
+encoding overhead; subsequent wall times are not a controlled comparison with
+these first runs. Final defaults use 16-frame overlap to provide more context
+around SAM's 15-frame hot-start period. Coverage checks now reject incomplete or
+duplicate backend frame output, manifests record the code revision and failure
+status, and 28 tests pass.
