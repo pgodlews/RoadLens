@@ -1,0 +1,14 @@
+[
+  {
+    "image": "eccup-known-location.png",
+    "content": "{\"observations\":[]}"
+  },
+  {
+    "image": "eccup-second-outbound.png",
+    "content": "{\"observations\":[{\"type\":\"damaged_asphalt\",\"description\":\"lighter-colored repair patch visible along the right edge of the road extending toward the foreground with irregular edges; evidence of prior surface repair, uncertainty about extent due to perspective\",\"confidence\":\"medium\",\"box_xywh_normalized\":[0.65,0.60,0.33,0.40]},{\"type\":\"damaged_asphalt\",\"description\":\"lighter-colored patch on the left side of the road near the foreground with irregular boundary and surrounding darker asphalt; appears consistent with a repair area, low certainty on exact condition\",\"confidence\":\"low\",\"box_xywh_normalized\":[0.20,0.70,0.25,0.35]},{\"type\":\"cracking\",\"description\":\"dark irregular cracking/disruption of asphalt on the right side of the road mid-distance, with a small darker spot further ahead; visible surface distress but limited resolution for definitive classification\",\"confidence\":\"low\",\"box_xywh_normalized\":[0.47,0.42,0.10,0.12]}]}"
+  },
+  {
+    "image": "eccup-second-return.png",
+    "content": "{\"observations\":[{\"type\":\"pothole\",\"description\":\"small dark depression with lighter interior visible on road surface ahead to the right of center, possibly a pothole or water-filled patch; uncertainty due to perspective and lighting\",\"confidence\":\"medium\",\"box_xywh_normalized\":[0.37,0.27,0.12,0.06]},{\"type\":\"damaged_asphalt\",\"description\":\"extensive area of deteriorated asphalt with visible cracking and patching on left and central lanes in foreground, surface appears uneven and worn\",\"confidence\":\"medium\",\"box_xywh_normalized\":[0.05,0.42,0.60,0.58]},{\"type\":\"cracking\",\"description\":\"network of fine cracks radiating from patched areas in the lower central road surface, consistent with age-related cracking\",\"confidence\":\"low\",\"box_xywh_normalized\":[0.28,0.45,0.35,0.45]}]}"
+  }
+]

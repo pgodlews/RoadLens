@@ -51,3 +51,11 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
 - Added a localhost review interface with evidence overlays, confirm/reject states, reviewed GeoJSON download, and OpenStreetMap display through the user's local United Kingdom PMTiles archive.
 - Verified the report server with real HTTP requests: JavaScript syntax passed, full-archive HEAD returned the correct size, and a 16-byte range request returned `206 Partial Content` with bytes identical to the source archive.
 - At this checkpoint, 16 unit tests and Ruff lint pass.
+
+### Muse Glimmer candidate-discovery evaluation
+
+- Published six user-authorised Garmin evaluation frames, including negative control, repair/discolouration, visible damage, and two user-supplied pothole locations in outbound and return directions. The repository remained private at publication time.
+- Ran Meta's official 17 GB Muse Glimmer GGUF and vision projector locally through llama.cpp build 12032 on the RTX 3090.
+- Full-frame Glimmer inference found the clearer damage at the second return location but missed the first reported pothole. Road-only crops improved sensitivity, producing damaged-asphalt, cracking, and possible-pothole candidates at both second-location views. The smooth control remained negative.
+- Glimmer boxes were sometimes coarse and one exceeded the frame, so integration must validate coordinates and retain human review. No accuracy percentage is claimed from this small qualitative set.
+- Raw responses, annotated outputs, method, and limitations are documented in `docs/glimmer-evaluation.md` and `docs/evaluation`.

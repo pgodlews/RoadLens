@@ -1,0 +1,14 @@
+[
+  {
+    "image": "eccup-known-location.png",
+    "content": "{\"scene_summary\":\"Narrow rural asphalt road curving ahead under overcast sky, bordered by hedges and grass verges. Road surface appears generally uniform with no clearly discernible potholes, cracking, damaged asphalt, debris or other obvious road-surface hazards visible in the frame.\",\"observations\":[]}"
+  },
+  {
+    "image": "eccup-second-outbound.png",
+    "content": "{\"scene_summary\":\"Rural single-track road ahead flanked by hedges and grass verge under overcast sky, viewed from bicycle camera perspective. Road surface shows variable texture with lighter repaired patches along edges and centre, but no clearly defined potholes or loose debris are discernible in the visible frame.\",\"observations\":[{\"type\":\"damaged_asphalt\",\"description\":\"Lighter-coloured patched/repaired asphalt areas along both edges of the road extending toward the foreground, with irregular edges and surface discolouration. Appearance consistent with prior repairs/ageing rather than a distinct fresh pothole; visibility is limited by perspective and lighting, so actual cracking versus repair is uncertain.\",\"confidence\":\"low\",\"box_xywh_normalized\":[0.18,0.60,0.80,0.45]}]}"
+  },
+  {
+    "image": "eccup-second-return.png",
+    "content": "{\"scene_summary\":\"Rural single-track asphalt road ahead under overcast sky, flanked by hedges and grass verge. Road surface shows signs of deterioration on the left side in the foreground and mid-distance.\", \"observations\":[{\"type\":\"damaged_asphalt\",\"description\":\"Large irregular patch of repaired/deteriorated asphalt with cracking along the left wheel track extending into the foreground; visible surface breakup and discolouration consistent with damaged asphalt, uncertainty about depth\", \"confidence\":\"medium\",\"box_xywh_normalized\":[0.05,0.65,0.38,0.35]}, {\"type\":\"pothole\",\"description\":\"Shallow depression / patch on the left edge of the carriageway about mid-distance, lighter discoloured area with a small edge break, visible as a possible pothole or repair; uncertainty due to perspective and lighting\", \"confidence\":\"low\",\"box_xywh_normalized\":[0.35,0.47,0.18,0.08]}]}"
+  }
+]

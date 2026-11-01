@@ -1,0 +1,14 @@
+[
+  {
+    "image": "eccup-control.png",
+    "content": "{\"observations\":[]}"
+  },
+  {
+    "image": "eccup-cracking.png",
+    "content": "{\"observations\":[]}"
+  },
+  {
+    "image": "eccup-repair.png",
+    "content": "{\"observations\":[{\"type\":\"damaged_asphalt\",\"description\":\"Light brown discolored area on the right side of the roadway in the mid-distance, possibly a repair patch or surface staining; low certainty due to image resolution and perspective, no clear pothole or cracking evident\",\"confidence\":\"low\",\"box_xywh_normalized\":[0.55,0.55,0.15,0.09]}]}"
+  }
+]

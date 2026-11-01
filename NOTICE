@@ -22,3 +22,11 @@ https://github.com/facebookresearch/sam3/blob/main/LICENSE
 
 The remote backend uses Meta's official meta_sam_parser and OpenAI-compatible
 Model API. No Meta model weights or source code are distributed in this repository.
+
+Muse Glimmer evaluation uses Meta's official Muse-Glimmer-30B-GGUF artifacts,
+licensed under Apache 2.0:
+https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF
+
+Local multimodal inference is provided by llama.cpp:
+https://github.com/ggml-org/llama.cpp
+No Glimmer weights or llama.cpp binaries are distributed in this repository.

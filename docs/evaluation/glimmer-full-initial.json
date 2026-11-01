@@ -1,0 +1,59 @@
+[
+  {
+    "image": "eccup-control.png",
+    "content": "{\"scene_summary\":\"Narrow rural asphalt road ahead flanked by hedges and vegetation under overcast sky; road surface appears generally uniform in the visible frame.\",\"observations\":[]}",
+    "reasoning_content": "You are reviewing one still frame from a bicycle camera for post-ride road-hazard analysis. Inspect only visible evidence. Identify potholes, cracked or damaged asphalt, loose debris, or other road-surface hazards. Carefully distinguish repairs, shadows, and discolouration from actual potholes. Return only JSON...\n\nThe road looks fairly smooth. No obvious potholes, cracking, damaged asphalt, debris. Maybe some small specks but likely not hazards. Might be no clear hazard. Return empty observations.\n\nScene summary: narrow rural road flanked by hedges under overcast sky. No clear hazards visible.\n\nReturn JSON with empty observations.\n\n",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 172,
+      "prompt_tokens": 1931,
+      "total_tokens": 2103,
+      "completion_tokens_details": null,
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 0,
+        "image_tokens": null,
+        "text_tokens": null
+      }
+    }
+  },
+  {
+    "image": "eccup-cracking.png",
+    "content": "{\"scene_summary\":\"Narrow rural asphalt road flanked by hedges with two parked cars on the left under overcast sky; road surface appears generally uniform with no clearly discernible potholes, significant cracking, damaged asphalt, or loose debris visible in the frame.\",\"observations\":[]}",
+    "reasoning_content": "You are reviewing one still frame from a bicycle camera for post-ride road-hazard analysis. Inspect only visible evidence. Identify potholes, cracked or damaged asphalt, loose debris, or other road-surface hazards. Carefully distinguish repairs, shadows, and discolouration from actual potholes. Return only JSON...\n\nLook at image: narrow road with hedges, two cars parked left. Road surface appears generally asphalt. There is a dark patch maybe pothole? On right side near center? Might be a small dark spot on road around middle-right. Could be pothole or just discoloration. Also a crack across road maybe. Let's examine: road has a faint transverse crack around middle lower. Might be damaged asphalt. Also a small dark circular patch on right side of road about 2/3 down.\n\nUncertainty high. Might be no clear hazard. The instruction: return empty observations if no clear hazard. Could be ambiguous. Possibly a small pothole on right side about [0.68, 0.72, 0.08, 0.05]? Hmm.\n\nMaybe better to return empty observations. The visible evidence is not clear. The dark spots could be shadows. Safer to say no clear hazard.\n\nThus return scene_summary and empty observations.\n\n",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 325,
+      "prompt_tokens": 1931,
+      "total_tokens": 2256,
+      "completion_tokens_details": null,
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 49,
+        "image_tokens": null,
+        "text_tokens": null
+      }
+    }
+  },
+  {
+    "image": "eccup-repair.png",
+    "content": "{\"scene_summary\":\"Rural single-track asphalt road bordered by hedges under overcast sky; vehicle ahead in distance. Road surface appears generally intact with no clearly discernible potholes, cracking, loose debris or other distinct road-surface hazards visible in the frame; a lighter discoloured patch on the right side of the carriageway is present but cannot be confirmed as damage from this single still frame.\",\"observations\":[]}",
+    "reasoning_content": "You are reviewing one still frame from a bicycle camera for post-ride road-hazard analysis. Inspect only visible evidence. Identify potholes, cracked or damaged asphalt, loose debris, or other road-surface hazards. Carefully distinguish repairs, shadows, and discolouration from actual potholes. Return only JSON...\n\nScene summary: rural narrow road between hedges, overcast.\n\nObservations: There is a discolored patch on road right side maybe repair? Also some darker area. Could be damaged asphalt? Might be just discolouration. No clear pothole. Maybe small dark object? In middle distance a small dark spot. Could be debris? Hard to tell.\n\nBetter return empty observations array if no clear hazard. Might be a patch of lighter asphalt on right side mid-frame. Could be repair, not hazard. Uncertainty.\n\nProbably no clear hazard visible. Could note discolouration but not pothole.\n\nI'll return empty observations.\n\n",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 281,
+      "prompt_tokens": 1931,
+      "total_tokens": 2212,
+      "completion_tokens_details": null,
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 49,
+        "image_tokens": null,
+        "text_tokens": null
+      }
+    }
+  }
+]
