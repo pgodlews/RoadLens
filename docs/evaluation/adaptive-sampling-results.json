@@ -68,5 +68,20 @@
       "inferred_frames_including_overlap": 204,
       "unreviewed_tracks": 7
     }
-  ]
+  ],
+  "diagnostic_agreement": {
+    "matched_best_evidence_frames": 7,
+    "all_best_source_timestamps_equal": true,
+    "all_best_scores_equal": true,
+    "mask_iou_per_matched_pair": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "interpretation": "Agreement between model runs, not manually labelled pothole recall."
+  }
 }

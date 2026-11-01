@@ -12,10 +12,35 @@ with margins. The initial hypothesis is one sample per metre of travel, selectin
 a sharp nearby frame, followed by native-frame-rate examination around candidates.
 One metre is an experimental default, not a measured optimum.
 
+```mermaid
+flowchart LR
+    V[Source video: original timestamps] --> Q[Measure road-region sharpness]
+    G[Garmin speed over time] --> S[Select near distance targets]
+    Q --> S
+    S --> C[SAM detection and tracking]
+    C --> L[Record every result, including empty frames]
+    C --> W[Merge candidate time windows]
+    W --> F[SAM on every original frame in those windows]
+    F --> E[Rank and preserve evidence]
+    E --> R[Camera GPS and human review]
+```
+
 The nominal inference rate is speed in metres/second divided by spacing in metres.
 At one-metre spacing this is about 6 fps for this cyclist, 13.4 fps at 30 mph, and
 26.8 fps at 60 mph. Source frame rate limits achievable spatial coverage. We must
 report gaps rather than silently claim one-metre coverage when speed is too high.
+
+| Example speed | 0.5 m spacing | 1 m spacing | 2 m spacing |
+|---|---:|---:|---:|
+| 13 mph cycling | 11.6 fps | 5.8 fps | 2.9 fps |
+| 30 mph driving | 26.8 fps | 13.4 fps | 6.7 fps |
+| 60 mph driving | 53.6 fps | 26.8 fps | 13.4 fps |
+
+These are required sampling rates, not model throughput or detection accuracy.
+For a 30 fps source, the 0.5 m target at 60 mph is unattainable: retain all frames
+and report the larger spatial gaps. There is no separate hardcoded bike/car mode.
+A fixed every-Nth-frame rule would change spatial coverage with speed. A global
+"sharpest frame" rule could skip road sections; quality selection stays local.
 
 Selection must preserve source presentation timestamps: sampled-video frame index
 divided by an artificial playback rate is not the original recording time. Speed
@@ -100,6 +125,12 @@ Matching track counts do not establish matching defects, recall, or precision.
 Visual review of the adaptive contact sheet shows several repaired/patchy regions;
 these are **not seven confirmed potholes**.
 
+A subsequent direct comparison did find that all seven selected evidence frames
+had identical source timestamps, scores and masks between the two runs (mask IoU
+1.0 for each matched pair). Thus the adaptive method reproduced this full-frame
+baseline's chosen evidence on this one section, at higher runtime. This is model
+agreement, not agreement with manually labelled potholes.
+
 Model loading took about 12.5 s per run. Preparing native input frames took 12.3 s
 for the sampled run and 36.5 s for the full-frame run. Total wall time also includes
 fine-frame extraction, mask serialization and evidence export. These single runs
@@ -112,3 +143,20 @@ these first runs. Final defaults use 16-frame overlap to provide more context
 around SAM's 15-frame hot-start period. Coverage checks now reject incomplete or
 duplicate backend frame output, manifests record the code revision and failure
 status, and 28 tests pass.
+
+## Road-wide scan observations (in progress)
+
+The outbound survey covers 150–360 s of `GRMS0010.MP4`; the return covers
+420 s to the end of `GRMS0012.MP4`. These include margins around the previously
+identified road corridor. Neither scan accepts or uses pothole pins for frame
+selection. The outbound plan selects 1,381 of 6,294 original frames over about
+1,380 m of integrated speed. All original frames have usable interpolated speed;
+the largest selected spatial gap is 1.48 m, illustrating why "one metre" is a
+target rather than a strict coverage guarantee.
+
+During inspection of the outbound first-pass ledger, a candidate at 159.027 s
+segments a small road-edge defect in the same scene as the earlier reported-location
+still at 158 s, which had no SAM detection. This is useful evidence that a nearby
+video view can succeed where a selected still failed. It does not isolate the
+benefit of sampling: internal thresholds, input handling and temporal context also
+changed. The candidate remains unreviewed; generated images remain local.
