@@ -1,0 +1,24 @@
+RoadLens
+Copyright (c) 2026 Piotr Godlewski
+
+Telemetry reuse
+---------------
+The timed-metadata grouping and ExifTool extraction approach in
+src/roadlens/telemetry.py was adapted from Ride Studio:
+https://github.com/pgodlews/ride-studio
+
+Ride Studio is Copyright (c) 2026 Piotr Godlewski and is distributed under the
+MIT License. Its license is reproduced in LICENSE-RIDE-STUDIO.
+
+This prior-work attribution does not represent RoadLens telemetry validation as
+new hackathon development. New integration, analysis, and application code is
+recorded separately in the RoadLens Git history.
+
+Meta tooling
+------------
+RoadLens uses Meta SAM 3.1 through its public local and hosted interfaces. SAM
+model code and checkpoints are separate works governed by the SAM License:
+https://github.com/facebookresearch/sam3/blob/main/LICENSE
+
+The remote backend uses Meta's official meta_sam_parser and OpenAI-compatible
+Model API. No Meta model weights or source code are distributed in this repository.
