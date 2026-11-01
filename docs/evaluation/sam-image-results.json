@@ -1,0 +1,122 @@
+[
+  {
+    "image": "eccup-control.png",
+    "prompt": "pothole",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-control.png",
+    "prompt": "cracking",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-control.png",
+    "prompt": "damaged asphalt",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-cracking.png",
+    "prompt": "pothole",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-cracking.png",
+    "prompt": "cracking",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-cracking.png",
+    "prompt": "damaged asphalt",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-known-location.png",
+    "prompt": "pothole",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-known-location.png",
+    "prompt": "cracking",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-known-location.png",
+    "prompt": "damaged asphalt",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-repair.png",
+    "prompt": "pothole",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-repair.png",
+    "prompt": "cracking",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-repair.png",
+    "prompt": "damaged asphalt",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-second-outbound.png",
+    "prompt": "pothole",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-second-outbound.png",
+    "prompt": "cracking",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-second-outbound.png",
+    "prompt": "damaged asphalt",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-second-return.png",
+    "prompt": "pothole",
+    "threshold": 0.1,
+    "detections": [
+      {
+        "object_id": 0,
+        "score": 0.7460317611694336,
+        "foreground_pixels": 964,
+        "box_xywh_normalized": [
+          0.3921875059604645,
+          0.5447470545768738,
+          0.05156249925494194,
+          0.019455252215266228
+        ]
+      }
+    ]
+  },
+  {
+    "image": "eccup-second-return.png",
+    "prompt": "cracking",
+    "threshold": 0.1,
+    "detections": []
+  },
+  {
+    "image": "eccup-second-return.png",
+    "prompt": "damaged asphalt",
+    "threshold": 0.1,
+    "detections": []
+  }
+]

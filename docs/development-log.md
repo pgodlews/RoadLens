@@ -59,3 +59,9 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
 - Full-frame Glimmer inference found the clearer damage at the second return location but missed the first reported pothole. Road-only crops improved sensitivity, producing damaged-asphalt, cracking, and possible-pothole candidates at both second-location views. The smooth control remained negative.
 - Glimmer boxes were sometimes coarse and one exceeded the frame, so integration must validate coordinates and retain human review. No accuracy percentage is claimed from this small qualitative set.
 - Raw responses, annotated outputs, method, and limitations are documented in `docs/glimmer-evaluation.md` and `docs/evaluation`.
+
+### SAM 3.1 published-image comparison
+
+- Ran all six published images through local SAM 3.1 with `pothole`, `cracking`, and `damaged asphalt` prompts at threshold 0.1, for 18 completed image/prompt combinations.
+- The second return image produced one `pothole` mask with score 0.7460. The 964-pixel mask tightly covers the isolated mid-distance defect. All other combinations returned no detections.
+- This is the first confirmed useful pothole segmentation in the evaluation, but it does not establish reliable general detection. The result and comparison with Glimmer's broader candidate boxes are recorded in `docs/sam-image-evaluation.md`.
