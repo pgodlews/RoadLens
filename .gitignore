@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Private source footage and ride telemetry
+/clips/
+/data/clips/
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.avi
+*.AVI
+*.fit
+*.FIT
+*.glv
+*.GLV
+*.gpx
+*.tcx
+
+# Generated analysis
+/artifacts/
+/runs/
+
+# Operating system
+.DS_Store
