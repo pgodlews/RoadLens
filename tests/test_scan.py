@@ -7,7 +7,7 @@ import pytest
 from roadlens.cli import build_parser
 from roadlens.domain import Detection, FrameSegmentations
 from roadlens.sampling import FrameChoice
-from roadlens.scan import TrackRegistry, run_scan
+from roadlens.scan import TrackRegistry, run_pass, run_scan
 from roadlens.scan_media import measure_frames, save_selected_frames
 from roadlens.telemetry import TelemetryResult, TelemetrySample
 
@@ -130,3 +130,39 @@ def test_track_registry_only_merges_with_shared_visual_evidence(tmp_path):
     add(10, (0.6, 0.6, 0.2, 0.2), {})  # Same PTS, different defect.
     add(11, (0.1, 0.1, 0.2, 0.2), {})  # No shared PTS: don't assume identity.
     assert len(registry.merged()) == 3
+
+
+def test_incomplete_backend_output_cannot_pass_as_complete_coverage(tmp_path):
+    class Backend:
+        def segment_video(self, path, prompt):
+            yield FrameSegmentations(0, prompt, "local", ())
+
+    choices = [FrameChoice(t, 1, t, 1, "test") for t in (0, 1)]
+    with pytest.raises(ValueError, match="every requested frame"):
+        run_pass(
+            Backend(),
+            choices,
+            [tmp_path / "a.png", tmp_path / "b.png"],
+            "coarse",
+            tmp_path,
+            TrackRegistry(),
+            4,
+            1,
+        )
+
+
+def test_failure_manifest_does_not_claim_a_completed_scan(tmp_path):
+    args = build_parser().parse_args(
+        [
+            "scan",
+            str(tmp_path / "missing.mp4"),
+            "--start",
+            "-1",
+            "--output",
+            str(tmp_path / "failed"),
+        ]
+    )
+    with pytest.raises(ValueError, match="nonnegative"):
+        run_scan(args)
+    manifest = json.loads((args.output / "scan.json").read_text())
+    assert manifest["status"] == "failed"

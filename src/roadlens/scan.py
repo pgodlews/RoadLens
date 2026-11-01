@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 import tempfile
 import time
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -161,45 +163,44 @@ def run_pass(backend, choices, paths, name, output, registry, chunk_size, overla
                 directory = Path(temporary)
                 for i, path in enumerate(paths[offset : offset + chunk_size]):
                     (directory / f"{i:06d}.png").symlink_to(path.resolve())
-                iterator = iter(backend.segment_video(directory, "pothole"))
-                while True:
-                    before = time.perf_counter()
-                    try:
-                        result = next(iterator)
-                    except StopIteration:
+                with closing(backend.segment_video(directory, "pothole")) as iterator:
+                    while True:
+                        before = time.perf_counter()
+                        try:
+                            result = next(iterator)
+                        except StopIteration:
+                            inference_seconds += time.perf_counter() - before
+                            break
                         inference_seconds += time.perf_counter() - before
-                        break
-                    inference_seconds += time.perf_counter() - before
-                    if result.frame_index in processed or not (
-                        0 <= result.frame_index < len(subset)
-                    ):
-                        iterator.close()
-                        raise ValueError(
-                            "SAM returned a duplicate or invalid frame index"
+                        if result.frame_index in processed or not (
+                            0 <= result.frame_index < len(subset)
+                        ):
+                            raise ValueError(
+                                "SAM returned a duplicate or invalid frame index"
+                            )
+                        processed.add(result.frame_index)
+                        choice = subset[result.frame_index]
+                        ledger.write(
+                            json.dumps(
+                                {
+                                    "pass": name,
+                                    "chunk_offset": offset,
+                                    "source_seconds": choice.source_seconds,
+                                    **result.to_dict(),
+                                }
+                            )
+                            + "\n"
                         )
-                    processed.add(result.frame_index)
-                    choice = subset[result.frame_index]
-                    ledger.write(
-                        json.dumps(
-                            {
-                                "pass": name,
-                                "chunk_offset": offset,
-                                "source_seconds": choice.source_seconds,
-                                **result.to_dict(),
-                            }
+                        registry.add(
+                            local_ids,
+                            result,
+                            choice,
+                            paths[offset + result.frame_index],
+                            name,
                         )
-                        + "\n"
-                    )
-                    registry.add(
-                        local_ids,
-                        result,
-                        choice,
-                        paths[offset + result.frame_index],
-                        name,
-                    )
-                    if result.detections:
-                        detections.append(choice.source_seconds)
-                    count += 1
+                        if result.detections:
+                            detections.append(choice.source_seconds)
+                        count += 1
                 ledger.flush()
                 if processed != set(range(len(subset))):
                     raise ValueError("SAM did not return every requested frame")
@@ -225,15 +226,29 @@ def run_pass(backend, choices, paths, name, output, registry, chunk_size, overla
 
 
 def run_scan(args, backend_factory=None):
+    if args.output.exists() and any(args.output.iterdir()):
+        raise ValueError("Use an empty output directory to avoid mixing runs")
+    args.output.mkdir(parents=True, exist_ok=True)
+    try:
+        return _run_scan(args, backend_factory)
+    except BaseException as error:
+        path = args.output / "scan.json"
+        manifest = json.loads(path.read_text()) if path.exists() else {}
+        manifest.update(
+            status="interrupted" if isinstance(error, KeyboardInterrupt) else "failed",
+            error=f"{type(error).__name__}: {error}",
+        )
+        path.write_text(json.dumps(manifest, indent=2) + "\n")
+        raise
+
+
+def _run_scan(args, backend_factory=None):
     from roadlens.backends.local import LocalSamBackend
 
     if args.start < 0 or args.duration <= 0 or args.width < 0:
         raise ValueError("Start/width must be nonnegative and duration positive")
     if args.chunk_frames < 2 or not 0 <= args.overlap_frames < args.chunk_frames:
         raise ValueError("Require chunk_frames >= 2 and 0 <= overlap < chunk_frames")
-    if args.output.exists() and any(args.output.iterdir()):
-        raise ValueError("Use an empty output directory to avoid mixing runs")
-    args.output.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
     metadata = probe_video(args.video)
     if not metadata["creation_time"]:
@@ -275,6 +290,24 @@ def run_scan(args, backend_factory=None):
         "timestamp_basis": "decoded PTS minus video stream start_time",
         "gps_time_basis": "MP4 creation_time + source PTS; camera positions only",
     }
+    repository = Path(__file__).resolve().parents[2]
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if revision.returncode == 0:
+        manifest["code_revision"] = revision.stdout.strip()
+        manifest["tracked_code_modified"] = (
+            subprocess.run(
+                ["git", "diff", "--quiet", "HEAD"],
+                cwd=repository,
+                check=False,
+            ).returncode
+            != 0
+        )
     manifest_path = args.output / "scan.json"
 
     def save_manifest():
