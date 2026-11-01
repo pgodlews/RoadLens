@@ -32,9 +32,11 @@ dist/
 *.gpx
 *.tcx
 
-# Generated analysis
+# Generated analysis and local runtimes/models
 /artifacts/
 /runs/
+/.tools/
+*.gguf
 
 # Operating system
 .DS_Store
