@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from roadlens.analysis import Observation, nearest_telemetry, write_observations
-from roadlens.domain import FrameSegmentations
+from roadlens.domain import Detection, FrameSegmentations, decode_mask
 from roadlens.media import probe_video
 from roadlens.output import write_frame_result
 from roadlens.sampling import refinement_windows, select_frames, speed_at_frames
@@ -151,10 +151,76 @@ class TrackRegistry:
 
 def run_pass(backend, choices, paths, name, output, registry, chunk_size, overlap):
     detections, timings = [], []
+    completed = {}
+    chunk_path = output / "chunks.jsonl"
+    if chunk_path.exists():
+        completed = {
+            row["offset"]: row
+            for row in (
+                json.loads(line) for line in chunk_path.read_text().splitlines()
+            )
+            if row["pass"] == name
+        }
+    cached = {}
+    ledger_path = output / "frames.jsonl"
+    if ledger_path.exists():
+        kept = []
+        for line in ledger_path.read_text().splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # An interrupted final write is not a completed result.
+            if row["pass"] != name or row["chunk_offset"] in completed:
+                kept.append(line)
+            if row["pass"] == name and row["chunk_offset"] in completed:
+                cached.setdefault(row["chunk_offset"], []).append(row)
+        temporary = ledger_path.with_suffix(".tmp")
+        temporary.write_text("\n".join(kept) + ("\n" if kept else ""))
+        temporary.replace(ledger_path)
     with (output / "frames.jsonl").open("a", encoding="utf-8") as ledger:
         for offset in range(0, len(choices), chunk_size - overlap):
             subset = choices[offset : offset + chunk_size]
             local_ids = {}
+            if offset in completed:
+                records = cached.get(offset, [])
+                if sorted(row["frame_index"] for row in records) != list(
+                    range(len(subset))
+                ):
+                    raise ValueError("Completed chunk ledger is missing or duplicated")
+                for row in records:
+                    result = FrameSegmentations(
+                        row["frame_index"],
+                        row["prompt"],
+                        row["backend"],
+                        tuple(
+                            Detection(
+                                d["object_id"],
+                                tuple(d["box_xywh_normalized"]),
+                                d["score"],
+                                decode_mask(d["mask_rle"]),
+                            )
+                            for d in row["detections"]
+                        ),
+                    )
+                    choice = subset[result.frame_index]
+                    if abs(row["source_seconds"] - choice.source_seconds) > 1e-6:
+                        raise ValueError("Cached chunk timestamps differ from the plan")
+                    registry.add(
+                        local_ids,
+                        result,
+                        choice,
+                        paths[offset + result.frame_index],
+                        name,
+                    )
+                    if result.detections:
+                        detections.append(choice.source_seconds)
+                timings.append(completed[offset])
+                print(
+                    f"Reused {name} chunk {offset}: {len(records)} frames", flush=True
+                )
+                if offset + chunk_size >= len(choices):
+                    break
+                continue
             started = time.perf_counter()
             inference_seconds = 0.0
             count = 0
@@ -180,13 +246,19 @@ def run_pass(backend, choices, paths, name, output, registry, chunk_size, overla
                             )
                         processed.add(result.frame_index)
                         choice = subset[result.frame_index]
+                        serialised = result.to_dict()
+                        for raw, saved in zip(
+                            result.detections, serialised["detections"], strict=True
+                        ):
+                            saved["box_xywh_normalized"] = list(raw.box_xywh)
+                            saved["score"] = raw.score
                         ledger.write(
                             json.dumps(
                                 {
                                     "pass": name,
                                     "chunk_offset": offset,
                                     "source_seconds": choice.source_seconds,
-                                    **result.to_dict(),
+                                    **serialised,
                                 }
                             )
                             + "\n"
@@ -226,7 +298,20 @@ def run_pass(backend, choices, paths, name, output, registry, chunk_size, overla
 
 
 def run_scan(args, backend_factory=None):
-    if args.output.exists() and any(args.output.iterdir()):
+    if args.resume:
+        previous = json.loads((args.output / "scan.json").read_text())
+        settings = {
+            key: value
+            for key, value in vars(args).items()
+            if key not in ("checkpoint", "video", "output", "resume")
+        }
+        if any(previous["settings"].get(k) != v for k, v in settings.items()):
+            raise ValueError("Resume requires the same scan settings")
+        if previous["source_video"] != args.video.name:
+            raise ValueError("Resume requires the same source video")
+        if previous["status"] == "complete":
+            return previous
+    elif args.output.exists() and any(args.output.iterdir()):
         raise ValueError("Use an empty output directory to avoid mixing runs")
     args.output.mkdir(parents=True, exist_ok=True)
     try:
@@ -250,6 +335,9 @@ def _run_scan(args, backend_factory=None):
     if args.chunk_frames < 2 or not 0 <= args.overlap_frames < args.chunk_frames:
         raise ValueError("Require chunk_frames >= 2 and 0 <= overlap < chunk_frames")
     started = time.perf_counter()
+    previous = (
+        json.loads((args.output / "scan.json").read_text()) if args.resume else None
+    )
     metadata = probe_video(args.video)
     if not metadata["creation_time"]:
         raise ValueError("Source has no creation time for Garmin alignment")
@@ -274,6 +362,11 @@ def _run_scan(args, backend_factory=None):
         "status": "preparing",
         "source_video": args.video.name,
         "source_metadata": metadata,
+        "source_signature": {
+            "path": str(args.video.resolve()),
+            "size_bytes": args.video.stat().st_size,
+            "mtime_ns": args.video.stat().st_mtime_ns,
+        },
         "settings": {
             key: str(value) if isinstance(value, Path) else value
             for key, value in vars(args).items()
@@ -309,6 +402,32 @@ def _run_scan(args, backend_factory=None):
             != 0
         )
     manifest_path = args.output / "scan.json"
+    if previous:
+        if (
+            previous.get("source_signature", manifest["source_signature"])
+            != (manifest["source_signature"])
+        ):
+            raise ValueError("Source file changed since the saved run")
+        if previous["source_metadata"] != metadata or [
+            c["source_seconds"] for c in previous["coarse_frames"]
+        ] != [c.source_seconds for c in choices]:
+            raise ValueError("Source metadata or sampling changed since the saved run")
+        manifest["resume_history"] = previous.get("resume_history", []) + [
+            {
+                key: previous.get(key)
+                for key in (
+                    "status",
+                    "code_revision",
+                    "preparation_seconds",
+                    "model_load_seconds",
+                    "wall_seconds",
+                    "error",
+                )
+            }
+        ]
+        manifest["timing_note"] = (
+            "Wall time covers latest attempt; inference totals include reused chunks."
+        )
 
     def save_manifest():
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -323,9 +442,11 @@ def _run_scan(args, backend_factory=None):
         manifest.update(status="planned", wall_seconds=time.perf_counter() - started)
         save_manifest()
         return manifest
-    paths = save_selected_frames(
-        args.video, choices, args.output / "coarse", args.width
-    )
+    paths = [args.output / "coarse" / f"{i:06d}.png" for i in range(len(choices))]
+    if not previous or not all(path.is_file() for path in paths):
+        paths = save_selected_frames(
+            args.video, choices, args.output / "coarse", args.width
+        )
     manifest["preparation_seconds"] = time.perf_counter() - started
     factory = backend_factory or LocalSamBackend
     loading = time.perf_counter()

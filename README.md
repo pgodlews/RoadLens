@@ -55,6 +55,11 @@ new output directory for every run. One metre and the detection thresholds are
 experimental settings, not validated optimal values. See the
 [experiment journey](docs/adaptive-sampling.md) for methods and measured results.
 
+To continue an interrupted scan, repeat the same command with `--resume`.
+Completed chunks are replayed from their saved masks; unfinished chunks are rerun.
+The manifest retains attempt history. On resumed runs, wall time describes the
+latest attempt, while inference totals include reused chunks.
+
 Extract only telemetry:
 
 ```bash

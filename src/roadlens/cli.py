@@ -77,6 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--refine-padding", type=float, default=2.0)
     scan.add_argument("--no-refine", action="store_true")
     scan.add_argument(
+        "--resume", action="store_true", help="Reuse completed scan chunks"
+    )
+    scan.add_argument(
         "--plan-only", action="store_true", help="Measure sampling without SAM"
     )
     scan.add_argument("--output", type=Path, required=True)

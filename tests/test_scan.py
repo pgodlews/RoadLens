@@ -109,6 +109,31 @@ def test_scan_audits_empty_frames_refines_and_exports_source_times(
     with pytest.raises(ValueError, match="empty output"):
         run_scan(args, Backend)
 
+    # Simulate interruption after completed receipts, plus a partial next chunk.
+    manifest_path = output / "scan.json"
+    previous = json.loads(manifest_path.read_text())
+    previous["status"] = "interrupted"
+    manifest_path.write_text(json.dumps(previous))
+    with (output / "frames.jsonl").open("a") as file:
+        file.write('{"pass":"coarse","chunk_offset":999,"frame_index":0}\n')
+        file.write('{"unfinished":')
+
+    class NoMoreInference(Backend):
+        def segment_video(self, path, prompt):
+            raise AssertionError("Completed chunks should be replayed, not inferred")
+
+    args.resume = True
+    resumed = run_scan(args, NoMoreInference)
+    assert resumed["status"] == "complete"
+    assert resumed["observations"] == result["observations"]
+    assert resumed["total_inference_seconds"] == result["total_inference_seconds"]
+    assert len(resumed["resume_history"]) == 1
+    assert json.loads((output / "observations.json").read_text()) == observations
+    args.spacing = 2
+    with pytest.raises(ValueError, match="same scan settings"):
+        run_scan(args, NoMoreInference)
+    assert json.loads(manifest_path.read_text())["status"] == "complete"
+
 
 def test_track_registry_only_merges_with_shared_visual_evidence(tmp_path):
     cv2 = pytest.importorskip("cv2")

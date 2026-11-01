@@ -160,3 +160,26 @@ still at 158 s, which had no SAM detection. This is useful evidence that a nearb
 video view can succeed where a selected still failed. It does not isolate the
 benefit of sampling: internal thresholds, input handling and temporal context also
 changed. The candidate remains unreviewed; generated images remain local.
+
+### Recovery checkpoint
+
+The outbound first pass completed all 29 chunks (1,829 inferences including
+overlap) in 362.3 s of SAM time. It produced 255 positive sampled timestamps and
+12 merged refinement windows totalling 102.5 s. Preparation took 147.2 s and model
+loading 12.2 s. These are candidates, not confirmed potholes.
+
+The process then stalled during native-frame export for the first refinement
+window, after writing 154 images. GPU utilization was zero and process threads
+were waiting. The stall occurred after introducing concurrent PNG writes; the
+exact cause was not established. The job was stopped, preserving completed
+chunks, and concurrent export was reverted to the previously successful serial
+path. The claim that parallel writing improves overall runtime remains unproven.
+
+Added explicit `--resume` support. Saved settings, source metadata/signature and
+selected timestamps must agree; completed chunks reconstruct tracks from the
+per-frame mask ledger. Partial chunks rerun. Full-precision boxes and scores are
+now retained in new ledgers. Attempt history distinguishes reused inference from
+the latest attempt's wall time. A regression test simulates interrupted output
+and verifies identical resumed observations without repeating completed inference.
+All 28 tests and Ruff pass. The recovery run has an on-demand Python stack-dump
+hook for diagnosing any further stall.
