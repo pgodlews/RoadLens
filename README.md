@@ -33,6 +33,28 @@ The output includes the downsampled analysis clip, overlays for frames with dete
 
 Use `--backend remote` to select the hosted Meta API instead. No remote request is made during tests.
 
+Scan by distance, then inspect candidate neighbourhoods at the native frame rate:
+
+```bash
+uv run roadlens scan /path/to/GRMS0010.MP4 \
+  --start 150 --duration 210 --spacing 1 \
+  --output artifacts/eccup-distance
+```
+
+This local-only experimental workflow selects a sharp nearby frame approximately
+every metre using integrated Garmin speed. It retains source timestamps and native
+resolution, uses overlapping SAM chunks, and revisits two seconds before and after
+each detected candidate. `--sampling all` provides a full-frame comparison;
+`--plan-only` measures sampling without loading SAM. `--width 1280` explicitly
+trades evidence resolution for lower storage and processing cost.
+
+`scan.json` records settings, selected timestamps, coverage and timings;
+`frames.jsonl` records every inference result, including empty frames. The existing
+`report` command displays the chosen evidence and camera GPS observations. Use a
+new output directory for every run. One metre and the detection thresholds are
+experimental settings, not validated optimal values. See the
+[experiment journey](docs/adaptive-sampling.md) for methods and measured results.
+
 Extract only telemetry:
 
 ```bash

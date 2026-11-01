@@ -28,6 +28,7 @@ local = [
     "torch==2.10.0",
     "torchcodec",
     "torchvision",
+    "av>=14",
 ]
 remote = [
     "meta_sam_parser",

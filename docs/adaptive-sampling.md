@@ -36,3 +36,45 @@ not demonstrate equivalently low internal detection thresholds.
 Implementation, tests, measured timings and negative results will be recorded in
 subsequent commits. Private video, telemetry and generated run artifacts stay out
 of Git; published documentation will contain aggregate results and methodology.
+
+## Implementation checkpoint
+
+Added `roadlens scan` with these experimental defaults:
+
+- One-metre distance targets; sharpness selection within 0.05 seconds and 0.2 m
+  of the target frame. Actual selected gaps are reported, not assumed to be 1 m.
+- A 0.5-second time limit at low speed, and 0.2-second fallback when speed cannot
+  be interpolated across valid fixes no more than three seconds apart. Source
+  frames may introduce rounding and the sharpness window may extend these gaps.
+- Native resolution PNG inputs and decoded source presentation timestamps.
+- 64-frame SAM sessions with 16-frame overlap, followed by native-frame passes
+  within two seconds either side of first-pass detections. Overlapping refinement
+  windows are merged. SAM still performs its internal input resizing.
+- Output/detection/new-object thresholds of 0.25/0.25/0.35, explicitly recorded.
+  These settings favour candidate discovery and may increase false positives;
+  SAM's other tracking/confirmation heuristics remain enabled.
+- Evidence ranking combines confidence, defect-crop sharpness, mask area and a
+  penalty for touching the frame boundary. This heuristic needs human review.
+- Track merging requires overlapping boxes at the same original timestamp.
+  Tracks without shared-frame evidence remain separate; GPS proximity alone
+  cannot prove identity. Repeated passes are not automatically deduplicated.
+
+The frame ledger includes empty outputs. The manifest records all selected source
+timestamps, estimated distance gaps, missing-speed counts, configuration, model
+load time, inference time and wall time. Partial runs never receive `complete`
+status. Full-frame mode uses the same machinery for a controlled comparison.
+
+The initial 49-frame GPU trial failed with CUDA out-of-memory using SAM's upstream
+16-frame grounding batch, even with 1280-pixel evidence. The next trial reduces
+grounding to four frames and retains native source resolution. This is separate
+from the 64-frame tracking-session length. Source-frame storage is offloaded to
+CPU memory.
+
+A further backend correction preserves propagation's revised frame-zero result.
+Previously, the initial prompt output was emitted and the propagated frame-zero
+output was discarded. This could discard detections established with video context.
+
+At this implementation checkpoint, 26 tests pass and Ruff passes. Tests include
+real encoded-video timestamp/extraction round trips and a fake-inference end-to-end
+scan covering refinement, empty results, evidence export and overlap deduplication.
+They verify plumbing, not real-world pothole recall. GPU benchmarks follow below.

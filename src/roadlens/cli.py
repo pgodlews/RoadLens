@@ -49,6 +49,38 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--fps", type=float, default=5)
     analyze.add_argument("--output", type=Path, required=True)
 
+    scan = commands.add_parser(
+        "scan",
+        help="Distance-sampled local scan with native-frame candidate refinement",
+    )
+    scan.add_argument("video", type=Path)
+    scan.add_argument(
+        "--checkpoint", type=Path, default=os.environ.get("ROADLENS_SAM_CHECKPOINT")
+    )
+    scan.add_argument("--start", type=float, default=0)
+    scan.add_argument("--duration", type=float, default=10)
+    scan.add_argument("--sampling", choices=("distance", "all"), default="distance")
+    scan.add_argument(
+        "--spacing", type=float, default=1.0, help="Target metres per sample"
+    )
+    scan.add_argument("--max-interval", type=float, default=0.5)
+    scan.add_argument("--sharpness-window", type=float, default=0.05)
+    scan.add_argument(
+        "--width", type=int, default=0, help="0 preserves source resolution"
+    )
+    scan.add_argument("--chunk-frames", type=int, default=64)
+    scan.add_argument("--overlap-frames", type=int, default=16)
+    scan.add_argument("--grounding-batch-size", type=int, default=4)
+    scan.add_argument("--confidence", type=float, default=0.25, help="Output filter")
+    scan.add_argument("--detection-threshold", type=float, default=0.25)
+    scan.add_argument("--new-object-threshold", type=float, default=0.35)
+    scan.add_argument("--refine-padding", type=float, default=2.0)
+    scan.add_argument("--no-refine", action="store_true")
+    scan.add_argument(
+        "--plan-only", action="store_true", help="Measure sampling without SAM"
+    )
+    scan.add_argument("--output", type=Path, required=True)
+
     telemetry = commands.add_parser(
         "telemetry", help="Extract timed Garmin GPS from a video"
     )
@@ -65,7 +97,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    if args.command == "segment":
+    if args.command == "scan":
+        from roadlens.scan import run_scan
+
+        if not args.plan_only and args.checkpoint is None:
+            raise ValueError("--checkpoint is required for scan inference")
+        run_scan(args)
+    elif args.command == "segment":
         backend = create_backend(
             args.backend,
             checkpoint_path=args.checkpoint,

@@ -1,0 +1,132 @@
+import json
+from datetime import UTC, datetime, timedelta
+
+import numpy as np
+import pytest
+
+from roadlens.cli import build_parser
+from roadlens.domain import Detection, FrameSegmentations
+from roadlens.sampling import FrameChoice
+from roadlens.scan import TrackRegistry, run_scan
+from roadlens.scan_media import measure_frames, save_selected_frames
+from roadlens.telemetry import TelemetryResult, TelemetrySample
+
+
+@pytest.fixture
+def video(tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    pytest.importorskip("av")
+    path = tmp_path / "source.mp4"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (64, 48))
+    assert writer.isOpened()
+    rng = np.random.default_rng(1)
+    for _ in range(30):
+        writer.write(rng.integers(0, 256, (48, 64, 3), dtype=np.uint8))
+    writer.release()
+    return path
+
+
+def test_decoder_round_trip_keeps_nonzero_source_timestamps(video, tmp_path):
+    times, sharpness = measure_frames(video, 0.7, 1.4)
+    assert times == pytest.approx([0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3])
+    selected = [FrameChoice(times[i], sharpness[i], 0, None, "test") for i in [0, 3, 6]]
+    paths = save_selected_frames(video, selected, tmp_path / "frames")
+    assert len(paths) == 3
+    assert all(p.is_file() for p in paths)
+
+
+def test_scan_audits_empty_frames_refines_and_exports_source_times(
+    video,
+    tmp_path,
+    monkeypatch,
+):
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(
+        "roadlens.scan.probe_video",
+        lambda path: {
+            "creation_time": created.isoformat(),
+            "duration": 3,
+            "fps": 10,
+            "width": 64,
+            "height": 48,
+        },
+    )
+    samples = tuple(
+        TelemetrySample(created + timedelta(seconds=t), 53, -1, 4, t) for t in range(4)
+    )
+    monkeypatch.setattr(
+        "roadlens.scan.read_garmin_telemetry", lambda path: TelemetryResult(samples, 0)
+    )
+
+    class Backend:
+        thresholds = {"output": 0.25, "detection": 0.25, "new_object": 0.35}
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def segment_video(self, path, prompt):
+            for index, _ in enumerate(sorted(path.glob("*.png"))):
+                mask = np.zeros((48, 64), dtype=bool)
+                mask[20:28, 25:35] = True
+                detections = (
+                    ()
+                    if index == 0
+                    else (Detection(1, (25 / 64, 20 / 48, 10 / 64, 8 / 48), 0.8, mask),)
+                )
+                yield FrameSegmentations(index, prompt, "local", detections)
+
+    output = tmp_path / "scan"
+    args = build_parser().parse_args(
+        [
+            "scan",
+            str(video),
+            "--start",
+            "0.7",
+            "--duration",
+            "1.5",
+            "--output",
+            str(output),
+            "--chunk-frames",
+            "8",
+            "--overlap-frames",
+            "2",
+        ]
+    )
+    result = run_scan(args, Backend)
+    assert result["status"] == "complete"
+    assert result["refinement_windows"]
+    ledger = [
+        json.loads(line) for line in (output / "frames.jsonl").read_text().splitlines()
+    ]
+    assert any(not frame["detections"] for frame in ledger)
+    assert any(frame["pass"].startswith("fine") for frame in ledger)
+    assert all(frame["source_seconds"] >= 0.7 for frame in ledger)
+    observations = json.loads((output / "observations.json").read_text())
+    assert len(observations) == 1
+    assert observations[0]["best_source_seconds"] >= 0.7
+    assert observations[0]["latitude"] == 53
+    assert (output / "overlay-000000.png").is_file()
+    with pytest.raises(ValueError, match="empty output"):
+        run_scan(args, Backend)
+
+
+def test_track_registry_only_merges_with_shared_visual_evidence(tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    path = tmp_path / "frame.png"
+    cv2.imwrite(str(path), np.full((48, 64, 3), 128, dtype=np.uint8))
+    registry = TrackRegistry()
+    mask = np.ones((48, 64), dtype=bool)
+
+    def add(time, box, identities):
+        frame = FrameSegmentations(
+            0, "pothole", "local", (Detection(0, box, 0.8, mask),)
+        )
+        registry.add(
+            identities, frame, FrameChoice(time, 1, 1, 1, "test"), path, "test"
+        )
+
+    add(10, (0.1, 0.1, 0.2, 0.2), {})
+    add(10, (0.1, 0.1, 0.2, 0.2), {})  # Same PTS and box: overlap duplicate.
+    add(10, (0.6, 0.6, 0.2, 0.2), {})  # Same PTS, different defect.
+    add(11, (0.1, 0.1, 0.2, 0.2), {})  # No shared PTS: don't assume identity.
+    assert len(registry.merged()) == 3

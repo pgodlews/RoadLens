@@ -1,0 +1,413 @@
+"""Auditable coarse-to-fine local SAM scans, independent of pothole map pins."""
+
+from __future__ import annotations
+
+import json
+import math
+import tempfile
+import time
+from dataclasses import replace
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
+
+from roadlens.analysis import Observation, nearest_telemetry, write_observations
+from roadlens.domain import FrameSegmentations
+from roadlens.media import probe_video
+from roadlens.output import write_frame_result
+from roadlens.sampling import refinement_windows, select_frames, speed_at_frames
+from roadlens.scan_media import coverage, measure_frames, save_selected_frames
+from roadlens.telemetry import read_garmin_telemetry
+
+
+def box_iou(a, b) -> float:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    intersection = max(0, min(ax + aw, bx + bw) - max(ax, bx)) * max(
+        0,
+        min(ay + ah, by + bh) - max(ay, by),
+    )
+    union = aw * ah + bw * bh - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+def evidence_quality(pixels, detection) -> tuple[float, dict]:
+    """Auditable heuristic: confidence, crop sharpness, size and clipping."""
+    import cv2
+
+    height, width = pixels.shape[:2]
+    x, y, w, h = detection.box_xywh
+    x0, y0 = max(0, int(x * width)), max(0, int(y * height))
+    x1, y1 = (
+        min(width, math.ceil((x + w) * width)),
+        min(
+            height,
+            math.ceil((y + h) * height),
+        ),
+    )
+    crop = pixels[y0:y1, x0:x1]
+    sharpness = 0.0
+    if crop.size:
+        if max(crop.shape[:2]) > 512:
+            scale = 512 / max(crop.shape[:2])
+            crop = cv2.resize(crop, None, fx=scale, fy=scale)
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    clipped = min(x, y) <= 0.005 or max(x + w, y + h) >= 0.995
+    area = int(detection.mask.sum())
+    score = detection.score if detection.score is not None else 0.0
+    quality = score * math.log1p(area) * math.log1p(sharpness)
+    if clipped:
+        quality *= 0.25
+    return quality, {
+        "rank": quality,
+        "crop_sharpness": sharpness,
+        "touches_frame_boundary": clipped,
+        "mask_pixels": area,
+        "method": "score * log1p(mask_pixels) * log1p(crop_sharpness); boundary x0.25",
+    }
+
+
+class TrackRegistry:
+    """Join tracks only using matching boxes at identical source timestamps.
+
+    This joins overlap and coarse/fine duplicates without claiming that nearby
+    camera GPS positions identify the same physical defect. Other splits remain
+    separate unreviewed candidates.
+    """
+
+    def __init__(self):
+        self.parents: list[int] = []
+        self.seen: dict[float, list[tuple[int, tuple]]] = {}
+        self.tracks: dict[int, dict] = {}
+
+    def root(self, identity):
+        while self.parents[identity] != identity:
+            self.parents[identity] = self.parents[self.parents[identity]]
+            identity = self.parents[identity]
+        return identity
+
+    def add(self, local_ids, result, choice, image, pass_name):
+        import cv2
+
+        pixels = cv2.imread(str(image)) if result.detections else None
+        timestamp = round(choice.source_seconds, 9)
+        for detection in result.detections:
+            if detection.object_id not in local_ids:
+                identity = len(self.parents)
+                self.parents.append(identity)
+                local_ids[detection.object_id] = identity
+            identity = self.root(local_ids[detection.object_id])
+            matches = [
+                self.root(other)
+                for other, box in self.seen.get(timestamp, [])
+                if box_iou(box, detection.box_xywh) >= 0.5
+            ]
+            for other in matches:
+                self.parents[self.root(other)] = identity
+            self.seen.setdefault(timestamp, []).append((identity, detection.box_xywh))
+            quality, details = evidence_quality(pixels, detection)
+            track = self.tracks.setdefault(
+                identity,
+                {
+                    "times": set(),
+                    "best": None,
+                    "quality": -1,
+                },
+            )
+            track["times"].add(timestamp)
+            if quality > track["quality"]:
+                track.update(
+                    quality=quality,
+                    best={
+                        "choice": choice,
+                        "image": image,
+                        "detection": detection,
+                        "pass": pass_name,
+                        "details": details,
+                    },
+                )
+
+    def merged(self):
+        merged = {}
+        for identity, track in self.tracks.items():
+            root = self.root(identity)
+            combined = merged.setdefault(
+                root,
+                {
+                    "times": set(),
+                    "quality": -1,
+                    "best": None,
+                },
+            )
+            combined["times"].update(track["times"])
+            if track["quality"] > combined["quality"]:
+                combined.update(quality=track["quality"], best=track["best"])
+        return sorted(merged.values(), key=lambda t: min(t["times"]))
+
+
+def run_pass(backend, choices, paths, name, output, registry, chunk_size, overlap):
+    detections, timings = [], []
+    with (output / "frames.jsonl").open("a", encoding="utf-8") as ledger:
+        for offset in range(0, len(choices), chunk_size - overlap):
+            subset = choices[offset : offset + chunk_size]
+            local_ids = {}
+            started = time.perf_counter()
+            inference_seconds = 0.0
+            count = 0
+            processed = set()
+            with tempfile.TemporaryDirectory(prefix="roadlens-") as temporary:
+                directory = Path(temporary)
+                for i, path in enumerate(paths[offset : offset + chunk_size]):
+                    (directory / f"{i:06d}.png").symlink_to(path.resolve())
+                iterator = iter(backend.segment_video(directory, "pothole"))
+                while True:
+                    before = time.perf_counter()
+                    try:
+                        result = next(iterator)
+                    except StopIteration:
+                        inference_seconds += time.perf_counter() - before
+                        break
+                    inference_seconds += time.perf_counter() - before
+                    if result.frame_index in processed or not (
+                        0 <= result.frame_index < len(subset)
+                    ):
+                        iterator.close()
+                        raise ValueError(
+                            "SAM returned a duplicate or invalid frame index"
+                        )
+                    processed.add(result.frame_index)
+                    choice = subset[result.frame_index]
+                    ledger.write(
+                        json.dumps(
+                            {
+                                "pass": name,
+                                "chunk_offset": offset,
+                                "source_seconds": choice.source_seconds,
+                                **result.to_dict(),
+                            }
+                        )
+                        + "\n"
+                    )
+                    registry.add(
+                        local_ids,
+                        result,
+                        choice,
+                        paths[offset + result.frame_index],
+                        name,
+                    )
+                    if result.detections:
+                        detections.append(choice.source_seconds)
+                    count += 1
+                ledger.flush()
+                if processed != set(range(len(subset))):
+                    raise ValueError("SAM did not return every requested frame")
+            timing = {
+                "pass": name,
+                "offset": offset,
+                "frames": count,
+                "inference_seconds": inference_seconds,
+                "wall_seconds": time.perf_counter() - started,
+            }
+            timings.append(timing)
+            with (output / "chunks.jsonl").open("a", encoding="utf-8") as file:
+                file.write(json.dumps(timing) + "\n")
+            print(
+                f"{name} chunk {offset}: {count} frames, "
+                f"{inference_seconds:.1f}s inference, "
+                f"{len(set(detections))} positive source frames so far",
+                flush=True,
+            )
+            if offset + chunk_size >= len(choices):
+                break
+    return detections, timings
+
+
+def run_scan(args, backend_factory=None):
+    from roadlens.backends.local import LocalSamBackend
+
+    if args.start < 0 or args.duration <= 0 or args.width < 0:
+        raise ValueError("Start/width must be nonnegative and duration positive")
+    if args.chunk_frames < 2 or not 0 <= args.overlap_frames < args.chunk_frames:
+        raise ValueError("Require chunk_frames >= 2 and 0 <= overlap < chunk_frames")
+    if args.output.exists() and any(args.output.iterdir()):
+        raise ValueError("Use an empty output directory to avoid mixing runs")
+    args.output.mkdir(parents=True, exist_ok=True)
+    started = time.perf_counter()
+    metadata = probe_video(args.video)
+    if not metadata["creation_time"]:
+        raise ValueError("Source has no creation time for Garmin alignment")
+    created = datetime.fromisoformat(metadata["creation_time"].replace("Z", "+00:00"))
+    end = min(args.start + args.duration, metadata["duration"])
+    if args.start >= end:
+        raise ValueError("Requested interval is outside the source video")
+    telemetry = read_garmin_telemetry(args.video)
+    print("Measuring source-frame sharpness and presentation timestamps...", flush=True)
+    times, quality = measure_frames(args.video, args.start, end)
+    speeds = speed_at_frames(np.asarray(times), telemetry.samples, created)
+    choices = select_frames(
+        times,
+        quality,
+        speeds,
+        spacing_m=args.spacing,
+        max_interval=args.max_interval,
+        sharpness_window=args.sharpness_window,
+        all_frames=args.sampling == "all",
+    )
+    manifest = {
+        "status": "preparing",
+        "source_video": args.video.name,
+        "source_metadata": metadata,
+        "settings": {
+            key: str(value) if isinstance(value, Path) else value
+            for key, value in vars(args).items()
+            if key not in ("checkpoint", "video", "output")
+        },
+        "coverage": coverage(choices, times),
+        "native_intervals_over_spacing": int(
+            np.sum(
+                np.diff(times) * speeds[1:] > args.spacing,
+            )
+        ),
+        "native_frames_without_speed": int(np.isnan(speeds).sum()),
+        "coarse_frames": [c.to_dict() for c in choices],
+        "timestamp_basis": "decoded PTS minus video stream start_time",
+        "gps_time_basis": "MP4 creation_time + source PTS; camera positions only",
+    }
+    manifest_path = args.output / "scan.json"
+
+    def save_manifest():
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    save_manifest()
+    print(
+        f"Selected {len(choices)} of {len(times)} native frames; "
+        f"{choices[-1].distance_m:.1f} m of integrated known speed",
+        flush=True,
+    )
+    if args.plan_only:
+        manifest.update(status="planned", wall_seconds=time.perf_counter() - started)
+        save_manifest()
+        return manifest
+    paths = save_selected_frames(
+        args.video, choices, args.output / "coarse", args.width
+    )
+    manifest["preparation_seconds"] = time.perf_counter() - started
+    factory = backend_factory or LocalSamBackend
+    loading = time.perf_counter()
+    backend = factory(
+        args.checkpoint,
+        args.confidence,
+        detection_threshold=args.detection_threshold,
+        new_object_threshold=args.new_object_threshold,
+        grounding_batch_size=args.grounding_batch_size,
+    )
+    manifest.update(
+        model_load_seconds=time.perf_counter() - loading,
+        thresholds=backend.thresholds,
+        status="running",
+    )
+    save_manifest()
+    registry = TrackRegistry()
+    positive, timings = run_pass(
+        backend,
+        choices,
+        paths,
+        "coarse",
+        args.output,
+        registry,
+        args.chunk_frames,
+        args.overlap_frames,
+    )
+    windows = (
+        []
+        if args.no_refine or args.sampling == "all"
+        else refinement_windows(
+            positive,
+            args.start,
+            end,
+            args.refine_padding,
+        )
+    )
+    manifest["refinement_windows"] = windows
+    save_manifest()
+    native_choices = select_frames(times, quality, speeds, all_frames=True)
+    for index, (lo, hi) in enumerate(windows):
+        fine = [c for c in native_choices if lo <= c.source_seconds <= hi]
+        fine_paths = save_selected_frames(
+            args.video,
+            fine,
+            args.output / f"fine-{index:03d}",
+            args.width,
+        )
+        manifest.setdefault("fine_frames", []).append(
+            {
+                "window": index,
+                "frames": [c.to_dict() for c in fine],
+            }
+        )
+        save_manifest()
+        _, fine_timings = run_pass(
+            backend,
+            fine,
+            fine_paths,
+            f"fine-{index:03d}",
+            args.output,
+            registry,
+            args.chunk_frames,
+            args.overlap_frames,
+        )
+        timings.extend(fine_timings)
+    observations, details = [], []
+    for identity, track in enumerate(registry.merged()):
+        best = track["best"]
+        choice = best["choice"]
+        recorded = created + timedelta(seconds=choice.source_seconds)
+        gps = nearest_telemetry(telemetry.samples, recorded)
+        detection = replace(best["detection"], object_id=identity)
+        frame = FrameSegmentations(identity, "pothole", "local", (detection,))
+        write_frame_result(args.video, frame, args.output, source_frame=best["image"])
+        observations.append(
+            Observation(
+                identity,
+                "pothole",
+                "local",
+                min(track["times"]),
+                max(track["times"]),
+                choice.source_seconds,
+                identity,
+                recorded,
+                detection.score,
+                int(detection.mask.sum()),
+                gps.latitude if gps else None,
+                gps.longitude if gps else None,
+                "garmin_camera_gps" if gps else "unavailable",
+            )
+        )
+        details.append(
+            {
+                "object_id": identity,
+                "best_pass": best["pass"],
+                "supporting_source_frames": len(track["times"]),
+                "quality": best["details"],
+            }
+        )
+    write_observations(observations, args.video, args.output)
+    (args.output / "evidence-selection.json").write_text(json.dumps(details, indent=2))
+    manifest.update(
+        status="complete",
+        chunks=timings,
+        observations=len(observations),
+        wall_seconds=time.perf_counter() - started,
+        total_inference_seconds=sum(t["inference_seconds"] for t in timings),
+        inferred_frames_including_overlap=sum(t["frames"] for t in timings),
+        note="Unreviewed candidates; recall and exact hazard locations are unverified.",
+    )
+    save_manifest()
+    print(
+        f"Completed in {manifest['wall_seconds']:.1f}s: "
+        f"{len(observations)} unreviewed candidates",
+        flush=True,
+    )
+    return manifest

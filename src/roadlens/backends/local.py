@@ -15,7 +15,19 @@ from roadlens.domain import Detection, FrameSegmentations
 class LocalSamBackend:
     name = "local"
 
-    def __init__(self, checkpoint_path: Path, confidence_threshold: float = 0.5):
+    def __init__(
+        self,
+        checkpoint_path: Path,
+        confidence_threshold: float = 0.5,
+        detection_threshold: float | None = None,
+        new_object_threshold: float | None = None,
+        grounding_batch_size: int = 4,
+    ):
+        if grounding_batch_size < 1:
+            raise ValueError("Grounding batch size must be positive")
+        for value in (confidence_threshold, detection_threshold, new_object_threshold):
+            if value is not None and not 0 <= value <= 1:
+                raise ValueError("SAM thresholds must be between 0 and 1")
         if not checkpoint_path.is_file():
             raise FileNotFoundError(f"SAM checkpoint not found: {checkpoint_path}")
 
@@ -36,6 +48,22 @@ class LocalSamBackend:
         self._predictor.start_session = MethodType(
             _start_multiplex_session, self._predictor
         )
+        if detection_threshold is not None:
+            self._predictor.model.score_threshold_detection = detection_threshold
+            self._predictor.model.image_only_det_thresh = detection_threshold
+        if new_object_threshold is not None:
+            self._predictor.model.new_det_thresh = new_object_threshold
+        self._predictor.model.batched_grounding_batch_size = grounding_batch_size
+
+    @property
+    def thresholds(self) -> dict[str, float]:
+        model = self._predictor.model
+        return {
+            "output": self._predictor.default_output_prob_thresh,
+            "detection": model.score_threshold_detection,
+            "new_object": model.new_det_thresh,
+            "image_only": model.image_only_det_thresh,
+        }
 
     def segment_video(
         self,
@@ -43,7 +71,7 @@ class LocalSamBackend:
         prompt: str,
         max_frames: int | None = None,
     ) -> Iterator[FrameSegmentations]:
-        if not video_path.is_file():
+        if not video_path.is_file() and not video_path.is_dir():
             raise FileNotFoundError(video_path)
         if not prompt.strip():
             raise ValueError("The segmentation prompt cannot be empty")
@@ -51,7 +79,11 @@ class LocalSamBackend:
             raise ValueError("max_frames must be at least 1")
 
         response = self._predictor.handle_request(
-            request={"type": "start_session", "resource_path": str(video_path)}
+            request={
+                "type": "start_session",
+                "resource_path": str(video_path),
+                "offload_video_to_cpu": True,
+            }
         )
         session_id = response["session_id"]
         yielded: set[int] = set()
@@ -64,9 +96,8 @@ class LocalSamBackend:
                     "text": prompt,
                 }
             )
-            yield self._convert_frame(0, response["outputs"], prompt)
-            yielded.add(0)
             if max_frames == 1:
+                yield self._convert_frame(0, response["outputs"], prompt)
                 return
 
             for response in self._predictor.handle_stream_request(
@@ -76,9 +107,7 @@ class LocalSamBackend:
                 if max_frames is not None and frame_index >= max_frames:
                     break
                 if frame_index not in yielded:
-                    yield self._convert_frame(
-                        frame_index, response["outputs"], prompt
-                    )
+                    yield self._convert_frame(frame_index, response["outputs"], prompt)
                     yielded.add(frame_index)
         finally:
             self._predictor.handle_request(
