@@ -122,6 +122,12 @@ def test_scan_audits_empty_frames_refines_and_exports_source_times(
         def segment_video(self, path, prompt):
             raise AssertionError("Completed chunks should be replayed, not inferred")
 
+    monkeypatch.setattr(
+        "roadlens.scan.save_selected_frames",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            AssertionError("Existing coarse/fine PNGs should be reused on resume")
+        ),
+    )
     args.resume = True
     resumed = run_scan(args, NoMoreInference)
     assert resumed["status"] == "complete"

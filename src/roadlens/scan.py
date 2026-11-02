@@ -489,12 +489,18 @@ def _run_scan(args, backend_factory=None):
     native_choices = select_frames(times, quality, speeds, all_frames=True)
     for index, (lo, hi) in enumerate(windows):
         fine = [c for c in native_choices if lo <= c.source_seconds <= hi]
-        fine_paths = save_selected_frames(
-            args.video,
-            fine,
-            args.output / f"fine-{index:03d}",
-            args.width,
-        )
+        fine_paths = [
+            args.output / f"fine-{index:03d}" / f"{i:06d}.png" for i in range(len(fine))
+        ]
+        if not previous or not all(
+            path.is_file() and path.stat().st_size > 0 for path in fine_paths
+        ):
+            fine_paths = save_selected_frames(
+                args.video,
+                fine,
+                args.output / f"fine-{index:03d}",
+                args.width,
+            )
         manifest.setdefault("fine_frames", []).append(
             {
                 "window": index,

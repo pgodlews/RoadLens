@@ -48,6 +48,15 @@ class LocalSamBackend:
         self._predictor.start_session = MethodType(
             _start_multiplex_session, self._predictor
         )
+        # In dynamic multiplex tracking, new objects added to an existing bucket
+        # on an already-tracked frame store their initial mask in
+        # non_cond_frame_outputs. If all earlier cond_frame_outputs objects are
+        # later removed, upstream clear_all_points_in_frame resets the entire
+        # bucket and crashes on the next frame ("No points are provided").
+        tracker_model = self._predictor.model.tracker.model
+        tracker_model.clear_all_points_in_frame = _wrap_clear_all_points_in_frame(
+            tracker_model.clear_all_points_in_frame
+        )
         if detection_threshold is not None:
             self._predictor.model.score_threshold_detection = detection_threshold
             self._predictor.model.image_only_det_thresh = detection_threshold
@@ -168,6 +177,62 @@ def _start_multiplex_session(
         "last_use_time": time.time(),
     }
     return {"session_id": session_id}
+
+
+def _wrap_clear_all_points_in_frame(original_clear):
+    def wrapped(
+        inference_state,
+        frame_idx,
+        obj_id,
+        need_output=True,
+        preserve_user_refined=False,
+    ):
+        obj_idx = inference_state["obj_id_to_idx"].get(obj_id)
+        cond_outputs = inference_state["output_dict"]["cond_frame_outputs"]
+        non_cond_outputs = inference_state["output_dict"]["non_cond_frame_outputs"]
+        if obj_idx is not None and set(cond_outputs) == {frame_idx}:
+            other_on_frame = any(
+                k != obj_idx
+                and (
+                    frame_idx in inference_state["point_inputs_per_obj"].get(k, {})
+                    or frame_idx in inference_state["mask_inputs_per_obj"].get(k, {})
+                )
+                for k in range(len(inference_state["obj_ids"]))
+            )
+            if not other_on_frame:
+                remaining_frames = {
+                    f
+                    for k in range(len(inference_state["obj_ids"]))
+                    for store in ("point_inputs_per_obj", "mask_inputs_per_obj")
+                    for f in inference_state[store].get(k, {})
+                    if not (k == obj_idx and f == frame_idx) and f in non_cond_outputs
+                }
+                if remaining_frames:
+                    promoted = min(remaining_frames)
+                    cond_outputs[promoted] = non_cond_outputs.pop(promoted)
+                    consolidated = inference_state["consolidated_frame_inds"]
+                    consolidated["non_cond_frame_outputs"].discard(promoted)
+                    consolidated["cond_frame_outputs"].add(promoted)
+                    for per_obj in inference_state["output_dict_per_obj"].values():
+                        if promoted in per_obj["non_cond_frame_outputs"]:
+                            per_obj["cond_frame_outputs"][promoted] = per_obj[
+                                "non_cond_frame_outputs"
+                            ].pop(promoted)
+        result = original_clear(
+            inference_state,
+            frame_idx,
+            obj_id,
+            need_output=need_output,
+            preserve_user_refined=preserve_user_refined,
+        )
+        if (
+            cond_outputs
+            and inference_state.get("first_ann_frame_idx") not in cond_outputs
+        ):
+            inference_state["first_ann_frame_idx"] = min(cond_outputs)
+        return result
+
+    return wrapped
 
 
 def _numpy(value: Any) -> np.ndarray:
