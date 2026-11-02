@@ -61,3 +61,14 @@ Six representative samples illustrate the size estimation technique across disti
    - Footprint: `~50 cm × ~114 cm (±25%)` (`3,770 cm²` planimetric area, `1.57–2.72 m` ahead).
    - Lane width check: `3.11 m (10.2 ft)` at `Z = 4.0 m`.
    ![Return #37 sunken patch edge size estimate](samples/eccup-pothole-size-estimate-return-37.jpg)
+
+## 3. Multi-Camera Input (DJI, Phone Video, Phone Photos)
+
+- **Priority:** Product roadmap (post-hackathon)
+- **Motivation:** RoadLens currently reads only Garmin Varia Vue timed GPS. Many riders, drivers, and pedestrians record with DJI action cameras or phones. Tested readers for these formats already exist in [Ride Studio](https://github.com/pgodlews/ride-studio), the same author's MIT-licensed project that RoadLens's Garmin reader was adapted from.
+- **Approach:**
+  1. Replace `read_garmin_telemetry` with a camera-detecting entry point that returns the same `TelemetryResult` plus a `device` field, and generalise the `garmin_camera_gps` location label to `camera_gps`.
+  2. **Phone video with timed QuickTime GPS:** port Ride Studio's `phone_telemetry.py` (ExifTool, already a RoadLens dependency).
+  3. **Phone photos:** port `photo_metadata.py` for per-photo EXIF GPS and add a still-image path through Studio ("photograph a pothole while walking"); SAM 3.1 already segments single images.
+  4. **DJI:** port `dji_telemetry.py` for embedded GPS and GPS SRT sidecar files, and carry its OSVplat MIT attribution into `NOTICE`.
+- **Guardrails:** Most built-in phone camera apps save one location per clip rather than a timed track. Label such clips as clip-level geotags, not per-frame positions. Do not align videos with separate GPX tracks without explicit, verified clock synchronisation. Claim support only for camera families validated on real footage; Ride Studio notes that the DJI GPS-remote variant has not yet been validated against a real recording.
