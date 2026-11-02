@@ -773,12 +773,14 @@ function renderRun(run) {
     document.getElementById('reportSection').style.display = 'none';
   }
 
+  // Candidates are the focus now; fade the scoped stretch behind them.
+  passLayer.eachLayer(layer => layer.setStyle({opacity: 0.25}));
   run.ordered.forEach((item, idx) => {
     if (item.latitude !== null && item.longitude !== null) {
       const pt = [item.latitude, item.longitude];
       bounds.push(pt);
       const m = L.circleMarker(pt, {
-        radius: 8, weight: 2, color: '#0E1012',
+        radius: 8, weight: 2.5, color: '#ECEEF0',
         fillColor: markerColour(item.review_status), fillOpacity: 1
       }).addTo(candidateLayer);
       m.bindTooltip('#' + esc(item.object_id) + ' · ' + esc(item.review_status));
