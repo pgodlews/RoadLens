@@ -682,14 +682,22 @@ class RemoteVlmBackend(BaseVlmBackend):
 
 
 def _discover_default_glimmer_files() -> tuple[Path | None, Path | None]:
-    env_model = os.environ.get("ROADLENS_GLIMMER_MODEL")
+    env_model = os.environ.get("ROADLENS_GLIMMER_MODEL") or os.environ.get(
+        "ROADLENS_GLIMMER_GGUF"
+    )
     env_mmproj = os.environ.get("ROADLENS_GLIMMER_MMPROJ")
     if env_model and env_mmproj:
         return Path(env_model), Path(env_mmproj)
+    hub_roots: list[Path] = []
+    for env_key in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE"):
+        if os.environ.get(env_key):
+            hub_roots.append(Path(os.environ[env_key]))
+    if os.environ.get("HF_HOME"):
+        hub_roots.append(Path(os.environ["HF_HOME"]) / "hub")
+    hub_roots.append(Path.home() / ".cache/huggingface/hub")
     candidates = [
-        Path("/mnt/ai/HF/hub/models--meta-models--Muse-Glimmer-30B-GGUF/snapshots"),
-        Path.home()
-        / ".cache/huggingface/hub/models--meta-models--Muse-Glimmer-30B-GGUF/snapshots",
+        hub / "models--meta-models--Muse-Glimmer-30B-GGUF/snapshots"
+        for hub in hub_roots
     ]
     for root in candidates:
         if not root.is_dir():

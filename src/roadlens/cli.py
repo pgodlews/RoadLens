@@ -131,6 +131,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     studio.add_argument("--host", default="127.0.0.1")
     studio.add_argument("--port", type=int, default=8766)
+
+    mcp = commands.add_parser(
+        "mcp",
+        help="Run the stdio Model Context Protocol (MCP) server for RoadLens",
+    )
+    mcp.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path("artifacts/mcp"),
+        help="Workspace directory for agent-triggered scans and VLM frames",
+    )
+    mcp.add_argument(
+        "--pmtiles",
+        type=Path,
+        default=os.environ.get("ROADLENS_PMTILES"),
+        help="Local OpenStreetMap PMTiles v3 archive for offline street resolution",
+    )
+    mcp.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=os.environ.get("ROADLENS_SAM_CHECKPOINT"),
+    )
     return parser
 
 
@@ -246,6 +268,14 @@ def main() -> None:
             port=args.port,
             checkpoint_path=args.checkpoint,
             initial_ride_path=args.ride,
+        )
+    elif args.command == "mcp":
+        from roadlens.mcp_server import serve_mcp_stdio
+
+        serve_mcp_stdio(
+            workspace_dir=args.workspace,
+            pmtiles_path=args.pmtiles,
+            checkpoint_path=args.checkpoint,
         )
 
 

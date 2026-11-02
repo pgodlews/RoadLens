@@ -121,3 +121,31 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
   are maintained in `docs/adaptive-sampling.md`; aggregate sanitized metrics are
   in `docs/evaluation/adaptive-sampling-results.json` and
   `docs/evaluation/eccup-corridor-survey.json`.
+- Built multi-clip Garmin ride indexing (`src/roadlens/ride.py`), parameterized
+  `roadlens scan --prompt`, and a dependency-free offline PMTiles v3 MVT street
+  and place index (`src/roadlens/pmtiles_roads.py`, `a519de5`). Verified against
+  a 12-clip, 25.2 km Garmin ride and `united-kingdom.pmtiles` that `.GLV`
+  companions and overlapping saved event clips are skipped/deduplicated and that
+  street-name, ride-offset (`20m`), wall-clock (`12:30`), and map-corridor
+  queries resolve completely offline in milliseconds.
+- Implemented dual VLM triage and grounded summary-report drafting
+  (`src/roadlens/vlm.py`, `roadlens triage`, `a5bf5f2`), supporting both local
+  **Muse Glimmer 30B** (`llama-server` auto-managed on `127.0.0.1` with clean
+  VRAM release) and remote OpenAI-compatible multimodal endpoints (with default
+  burned-in GPS-banner masking on remote images).
+- **Negative result & fix during real GPU validation of Muse Glimmer:** passing
+  filled blue SAM mask overlays (`overlay-*.png`) to Muse Glimmer obscured
+  interior asphalt texture, causing Glimmer to misclassify real pothole `#74` on
+  the return corridor as blue surface paint (`surface_debris_or_stain`).
+  Switching `build_triage_composite_data_url` to pair the unmodified
+  `frame-*.png` (with a padded outer red rectangle so zero candidate pixels are
+  tinted) alongside an unmasked 1:1 crop yielded 3/3 accurate separation on real
+  return-corridor examples (`#74` pothole -> `hazard_candidate`, `#54`
+  resurfaced patch -> `sealed_repair`, `#51` organic stain ->
+  `surface_debris_or_stain`) while preserving `review_status: "unreviewed"`.
+- Added the interactive map-first web workflow (`src/roadlens/studio.py`,
+  `roadlens studio`, `72d1af0`) and the stdio Model Context Protocol server plus
+  investigator skill (`src/roadlens/mcp_server.py`, `roadlens mcp`,
+  `skills/roadlens-investigator/SKILL.md`), enforcing bookended human-in-the-loop
+  scoping at the start and human visual confirmation before council GeoJSON
+  export at the end.
