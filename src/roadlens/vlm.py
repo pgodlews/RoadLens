@@ -642,7 +642,8 @@ class RemoteVlmBackend(BaseVlmBackend):
             )
         self.base_url = (
             base_url
-            or os.environ.get("ROADLENS_VLM_BASE_URL")
+            or os.environ.get("ROADLENS_VLM_API_URL")
+            or os.environ.get("ROADLENS_VLM_BASE_URL")  # Legacy alias.
             or "https://api.meta.ai/v1"
         )
         self.model_name = (
@@ -906,6 +907,19 @@ def create_vlm_backend(name: str = "local", **kwargs: Any) -> BaseVlmBackend:
     raise ValueError(f"Unknown VLM backend: {name!r}")
 
 
+def _detection_box_for_observation(
+    detections: list[dict[str, Any]], object_id: Any
+) -> Sequence[float] | None:
+    """Return the box of the detection belonging to `object_id` in a shared frame."""
+    for det in detections:
+        if object_id is not None and det.get("object_id") == object_id:
+            return det.get("box_xywh_normalized")
+    # A lone detection without a usable ID is unambiguous; otherwise never guess.
+    if len(detections) == 1 and object_id is None:
+        return detections[0].get("box_xywh_normalized")
+    return None
+
+
 def triage_run_directory(
     output_dir: Path,
     vlm_backend: BaseVlmBackend,
@@ -916,14 +930,21 @@ def triage_run_directory(
     draft_with_vlm: bool = True,
 ) -> dict[str, Any]:
     """Triage SAM observations in `output_dir` and draft `summary-report.md`."""
+    if max_candidates is not None and (
+        isinstance(max_candidates, bool)
+        or not isinstance(max_candidates, int)
+        or max_candidates < 0
+    ):
+        raise ValueError("max_candidates must be a nonnegative integer or None")
     obs_path = output_dir / "observations.json"
     observations: list[dict[str, Any]] = json.loads(
         obs_path.read_text(encoding="utf-8")
     )
+    selected = (
+        observations if max_candidates is None else observations[:max_candidates]
+    )
     triaged_count = 0
-    for idx, obs in enumerate(observations):
-        if max_candidates is not None and idx >= max_candidates:
-            break
+    for idx, obs in enumerate(selected):
         frame_idx = int(obs.get("best_frame_index", obs.get("object_id", idx)))
         overlay = output_dir / f"overlay-{frame_idx:06d}.png"
         frame = output_dir / f"frame-{frame_idx:06d}.png"
@@ -933,8 +954,7 @@ def triage_run_directory(
             dets = json.loads(result_json.read_text(encoding="utf-8")).get(
                 "detections", []
             )
-            if dets:
-                box_xywh = dets[0].get("box_xywh_normalized")
+            box_xywh = _detection_box_for_observation(dets, obs.get("object_id"))
         # Prefer raw `frame-*.png` + outer box so mask fill never hides texture.
         image_path = frame if frame.is_file() else overlay
         if not image_path.is_file():
@@ -948,15 +968,31 @@ def triage_run_directory(
         triaged_count += 1
 
     obs_path.write_text(json.dumps(observations, indent=2) + "\n", encoding="utf-8")
-    if draft_with_vlm and observations:
+    # Draft from saved human decisions (Studio's `review-decisions.json`), if any.
+    decisions_path = output_dir / "review-decisions.json"
+    decisions: dict[str, str] = (
+        json.loads(decisions_path.read_text(encoding="utf-8"))
+        if decisions_path.is_file()
+        else {}
+    )
+
+    def reviewed(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out = []
+        for idx, obs in enumerate(items):
+            key = str(int(obs.get("object_id", idx)))
+            status = decisions.get(key, obs.get("review_status"))
+            out.append({**obs, "review_status": status})
+        return out
+
+    if draft_with_vlm and selected:
         report_md = vlm_backend.draft_summary_report(
-            observations[: max_candidates or len(observations)],
+            reviewed(selected),
             street_name=street_name,
             place_name=place_name,
         )
     else:
         report_md = format_deterministic_summary_report(
-            observations,
+            reviewed(observations),
             street_name=street_name,
             place_name=place_name,
         )

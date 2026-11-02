@@ -544,8 +544,13 @@ def _build_segment(
     geocoder: StreetGeocoder | None = None,
     explicit_street: str | None = None,
 ) -> ResolvedSegment:
-    lo = max(0.0, min(clip.duration_seconds, start_seconds))
-    hi = max(lo + 0.5, min(clip.duration_seconds, end_seconds))
+    # Enforce a minimum 0.5 s window without ever leaving [0, duration].
+    total = max(0.0, clip.duration_seconds)
+    lo = max(0.0, min(total, start_seconds))
+    hi = max(lo, min(total, end_seconds))
+    if hi - lo < 0.5:
+        hi = min(total, lo + 0.5)
+        lo = max(0.0, hi - 0.5)
     duration = hi - lo
     sub_points = [pt for pt in clip.points if lo - 1.0 <= pt.source_seconds <= hi + 1.0]
     dist_m = 0.0

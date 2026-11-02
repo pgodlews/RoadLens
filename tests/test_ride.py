@@ -344,3 +344,33 @@ def test_scan_custom_prompt_propagates_to_observations_and_resume_check(
     args.prompt = "pothole"
     with pytest.raises(ValueError, match="same scan settings"):
         run_scan(args, CustomBackend)
+
+
+def test_build_segment_keeps_narrow_windows_inside_clip_bounds():
+    from pathlib import Path
+
+    from roadlens.ride import ClipIndex, _build_segment
+
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    clip = ClipIndex(
+        clip_index=0,
+        path=Path("clip.mp4"),
+        name="clip.mp4",
+        created_utc=created,
+        end_utc=created + timedelta(seconds=10),
+        duration_seconds=10.0,
+        fps=30.0,
+        width=64,
+        height=48,
+        ride_elapsed_start_seconds=0.0,
+        ride_elapsed_end_seconds=10.0,
+        distance_m=0.0,
+        gps_fix_count=0,
+        rejected_gps_samples=0,
+        overlaps_primary_clip=False,
+        points=(),
+    )
+    for start, end in ((9.9, 10.0), (10.0, 10.0), (12.0, 15.0), (0.0, 0.1)):
+        seg = _build_segment(clip, start, end, 1, "offset", "test")
+        assert 0.0 <= seg.start_seconds < seg.end_seconds <= 10.0
+        assert seg.end_seconds - seg.start_seconds == pytest.approx(0.5)

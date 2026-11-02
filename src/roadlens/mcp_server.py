@@ -431,7 +431,7 @@ class RoadLensMcpServer:
                     rev = self.street_index.reverse_road(fix.latitude, fix.longitude)
                     street_name = rev.street_name
                     place_name = rev.place_name
-                findings = backend.discover_hazards(
+                discovery = backend.discover_hazards(
                     frame_path, prompt, road_crop=road_crop
                 )
                 frame_reports.append(
@@ -447,7 +447,8 @@ class RoadLensMcpServer:
                         "street_name": street_name,
                         "place_name": place_name,
                         "review_status": "unreviewed",
-                        "findings": [f.to_dict() for f in findings],
+                        "scene_summary": discovery.get("scene_summary", ""),
+                        "findings": list(discovery.get("findings") or []),
                     }
                 )
 

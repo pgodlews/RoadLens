@@ -82,22 +82,37 @@ class _FakeVlmBackend:
     def __exit__(self, exc_type, exc, tb):
         return None
 
+    # Mirrors the production `BaseVlmBackend` return contracts.
     def discover_hazards(self, image_path: Path, prompt: str, road_crop: bool = True):
-        return [
-            VlmFinding(
-                hazard_type=prompt,
-                classification="hazard_candidate",
-                confidence="high",
-                description=f"Large {prompt} across nearside lane.",
-                box_xywh_normalized=(0.25, 0.55, 0.35, 0.2),
-            )
-        ]
+        finding = VlmFinding(
+            hazard_type=prompt,
+            classification="hazard_candidate",
+            confidence="high",
+            description=f"Large {prompt} across nearside lane.",
+            box_xywh_normalized=(0.25, 0.55, 0.35, 0.2),
+        )
+        return {
+            "backend": self.name,
+            "model": "fake-vlm",
+            "road_crop": road_crop,
+            "gps_banner_redacted": road_crop,
+            "scene_summary": "Rural lane with broken nearside edge.",
+            "findings": [finding.to_dict()],
+        }
 
-    def triage_observation(self, raw_frame_path: Path, prompt: str, **kwargs):
+    def triage_observation(
+        self,
+        observation: dict,
+        evidence_image_path: Path,
+        *,
+        candidate_box_xywh=None,
+        redact_gps_banner=None,
+    ):
+        concept = observation.get("prompt", "pothole")
         return {
             "classification": "hazard_candidate",
             "confidence": "high",
-            "visual_description": f"Depressed asphalt edge consistent with {prompt}.",
+            "visual_description": f"Depressed asphalt edge consistent with {concept}.",
             "reasoning_summary": "Distinct shadow and broken tarmac margin.",
             "model": "fake-vlm",
         }

@@ -11,6 +11,7 @@ from PIL import Image
 from roadlens.vlm import (
     LocalGlimmerBackend,
     RemoteVlmBackend,
+    _detection_box_for_observation,
     format_deterministic_summary_report,
     prepare_image_data_url,
     triage_run_directory,
@@ -185,3 +186,84 @@ def test_local_glimmer_triage_preserves_unreviewed_hitl_status(tmp_path):
     )
     assert "camera GPS" in det_report
     assert "sealed_repair" in det_report
+
+
+def test_triage_selects_detection_matching_observation_object_id():
+    dets = [
+        {"object_id": 11, "box_xywh_normalized": [0.1, 0.5, 0.1, 0.1]},
+        {"object_id": 22, "box_xywh_normalized": [0.6, 0.6, 0.2, 0.1]},
+    ]
+    assert _detection_box_for_observation(dets, 22) == [0.6, 0.6, 0.2, 0.1]
+    assert _detection_box_for_observation(dets, 11) == [0.1, 0.5, 0.1, 0.1]
+    # Unknown ID in a multi-detection frame falls back to the observation box.
+    assert _detection_box_for_observation(dets, 33) is None
+    assert _detection_box_for_observation([], 11) is None
+
+
+def test_remote_vlm_uses_documented_endpoint_variable(monkeypatch):
+    monkeypatch.setenv("ROADLENS_VLM_API_KEY", "test-key")
+    monkeypatch.delenv("ROADLENS_VLM_BASE_URL", raising=False)
+    monkeypatch.setenv("ROADLENS_VLM_API_URL", "https://vlm.example.test/v1")
+    assert RemoteVlmBackend().base_url == "https://vlm.example.test/v1"
+
+    monkeypatch.delenv("ROADLENS_VLM_API_URL")
+    monkeypatch.setenv("ROADLENS_VLM_BASE_URL", "https://legacy.example.test/v1")
+    assert RemoteVlmBackend().base_url == "https://legacy.example.test/v1"
+
+
+class _RecordingBackend:
+    def __init__(self):
+        self.triaged: list[int] = []
+        self.drafted: list[dict] | None = None
+
+    def triage_observation(self, observation, evidence_image_path, **kwargs):
+        self.triaged.append(observation["object_id"])
+        return {"classification": "uncertain", "confidence": "low"}
+
+    def draft_summary_report(self, observations, **kwargs):
+        self.drafted = list(observations)
+        return "# Draft\n"
+
+
+def _write_two_candidate_run(directory):
+    for index in (0, 1):
+        Image.fromarray(np.full((60, 80, 3), 128, dtype=np.uint8)).save(
+            directory / f"frame-{index:06d}.png"
+        )
+    obs = [
+        {"object_id": i, "prompt": "pothole", "review_status": "unreviewed",
+         "best_frame_index": i}
+        for i in (0, 1)
+    ]
+    (directory / "observations.json").write_text(json.dumps(obs))
+
+
+def test_triage_report_reflects_saved_human_review_decisions(tmp_path):
+    _write_two_candidate_run(tmp_path)
+    (tmp_path / "review-decisions.json").write_text(
+        json.dumps({"0": "confirmed", "1": "rejected"})
+    )
+    backend = _RecordingBackend()
+    triage_run_directory(tmp_path, backend)
+    assert [o["review_status"] for o in backend.drafted] == ["confirmed", "rejected"]
+    # Raw observations stay model output; decisions live in their own file.
+    saved = json.loads((tmp_path / "observations.json").read_text())
+    assert {o["review_status"] for o in saved} == {"unreviewed"}
+
+    triage_run_directory(tmp_path, backend, draft_with_vlm=False)
+    report = (tmp_path / "summary-report.md").read_text()
+    assert "1 confirmed · 0 unreviewed · 1 rejected" in report
+
+
+def test_triage_max_candidates_zero_and_negative(tmp_path):
+    _write_two_candidate_run(tmp_path)
+    backend = _RecordingBackend()
+    summary = triage_run_directory(tmp_path, backend, max_candidates=0)
+    assert summary["triaged_candidates"] == 0
+    assert backend.triaged == [] and backend.drafted is None
+    assert "Review Counts" in (tmp_path / "summary-report.md").read_text()
+
+    triage_run_directory(tmp_path, backend, max_candidates=1)
+    assert backend.triaged == [0] and len(backend.drafted) == 1
+    with pytest.raises(ValueError, match="nonnegative"):
+        triage_run_directory(tmp_path, backend, max_candidates=-1)

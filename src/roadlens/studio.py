@@ -1113,7 +1113,11 @@ class StudioHandler(BaseHTTPRequestHandler):
                             triage_run_directory(
                                 run_dir,
                                 vlm_backend,
-                                max_candidates=body.get("max_candidates"),
+                                max_candidates=(
+                                    None
+                                    if body.get("max_candidates") is None
+                                    else int(body["max_candidates"])
+                                ),
                             )
                         self._send_json(self.state.serialize_run(run_id))
                         return

@@ -149,3 +149,39 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
   `skills/roadlens-investigator/SKILL.md`), enforcing bookended human-in-the-loop
   scoping at the start and human visual confirmation before council GeoJSON
   export at the end.
+
+## 2 November 2026
+
+### Code review fixes
+
+An independent code review found defects in the review guardrails and the
+agent workflow. Each fix below has a regression test (53 tests pass with
+`-W error`; Ruff clean).
+
+- **MCP VLM discovery:** `discover_segment_hazards_vlm` crashed against the real
+  backend because it treated the `discover_hazards` dictionary as a list. The
+  test double now mirrors the production return contracts.
+- **Standalone report export:** `roadlens report` exported every candidate,
+  including unreviewed and rejected ones. The default download is now
+  human-confirmed-only (disabled until something is confirmed), with a
+  separately labelled full-audit export, matching Studio.
+- **Standalone report state:** browser-stored decisions were keyed by URL path,
+  so confirming candidate `0` in one run could pre-confirm candidate `0` in
+  another. Decisions are now keyed by run directory and candidate identity, and
+  observation text is HTML-escaped before rendering.
+- **Triage evidence box:** when several detections shared a result frame, every
+  candidate was triaged with the first detection's box. Triage now selects the
+  detection matching the observation's `object_id`.
+- **Completed `--resume`:** a completed scan was returned without checking that
+  the source video still existed or was unchanged; both are now validated.
+  A reported duplicate-ledger issue on retried chunks did not reproduce against
+  the actual code, and a regression test now locks that behaviour in.
+- **Remote VLM endpoint:** the documented `ROADLENS_VLM_API_URL` was ignored in
+  favour of an undocumented variable, which could send frames to the default
+  endpoint. The documented name is now honoured (old name kept as an alias).
+- **Studio triage reports:** drafted summaries ignored saved review decisions.
+  `triage_run_directory` now drafts from `review-decisions.json` while leaving
+  raw model observations unchanged.
+- **Smaller fixes:** narrow segment windows can no longer extend past the clip
+  end, and `max_candidates` rejects negative values and treats `0` as "triage
+  none".

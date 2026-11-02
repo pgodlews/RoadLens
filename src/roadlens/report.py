@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from functools import partial
@@ -34,6 +35,7 @@ _PAGE = """<!doctype html>
     .actions { display: flex; gap: 8px; margin-top: 10px; }
     button { border: 1px solid #526157; border-radius: 7px; padding: 8px 11px; background: #2a372d; color: #edf2ec; cursor: pointer; }
     button:hover { background: #3b4b40; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
     button.confirm { background: #286238; }
     button.reject { background: #63332e; }
     .empty { padding: 24px 12px; color: #a8b5aa; text-align: center; }
@@ -45,8 +47,8 @@ _PAGE = """<!doctype html>
 <header><strong>RoadLens</strong><span>Post-ride evidence review · camera GPS, not exact hazard positions</span></header>
 <main>
   <aside>
-    <div class="summary"><b id="count"></b> candidate observation(s), initially unreviewed.<br>Confirm or reject each candidate, then export the reviewed GeoJSON.</div>
-    <div class="actions" style="margin-bottom:18px"><button id="download">Download reviewed GeoJSON</button></div>
+    <div class="summary"><b id="count"></b> candidate observation(s), initially unreviewed.<br>Confirm or reject each candidate, then export only the human-confirmed GeoJSON.</div>
+    <div class="actions" style="margin-bottom:18px"><button id="download" disabled>Download confirmed GeoJSON (0)</button><button id="downloadAudit">Full audit (all statuses)</button></div>
     <section id="observations"></section>
   </aside>
   <div id="map"></div>
@@ -55,14 +57,28 @@ _PAGE = """<!doctype html>
 <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
 <script>
 const observations = __OBSERVATIONS__;
-const storageKey = 'roadlens-review-' + location.pathname;
+// Keyed per run so decisions never leak between runs served at the same origin.
+const storageKey = 'roadlens-review-__RUN_ID__';
 const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
 const markers = new Map();
 const map = L.map('map', {zoomControl: true});
 const archive = new pmtiles.PMTiles('__TILE_URL__');
 pmtiles.leafletRasterLayer(archive, {attribution: '© OpenStreetMap contributors', maxZoom: 19}).addTo(map);
 const bounds = [];
+function esc(val) {
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 function statusFor(item) { return saved[item.object_id] || item.review_status; }
+function updateExport() {
+  const confirmed = observations.filter(item => statusFor(item) === 'confirmed').length;
+  const button = document.getElementById('download');
+  button.textContent = 'Download confirmed GeoJSON (' + confirmed + ')';
+  button.disabled = confirmed === 0;
+}
 function colour(status) { return status === 'confirmed' ? '#61ba73' : status === 'rejected' ? '#a25b52' : '#e8b44d'; }
 function setStatus(item, status) {
   saved[item.object_id] = status;
@@ -71,13 +87,14 @@ function setStatus(item, status) {
   card.className = 'card ' + status;
   card.querySelector('.badge').textContent = status;
   if (markers.has(item.object_id)) markers.get(item.object_id).setStyle({color: colour(status), fillColor: colour(status)});
+  updateExport();
 }
 function render() {
   const container = document.getElementById('observations');
   document.getElementById('count').textContent = observations.length;
   if (!observations.length) {
     container.innerHTML = '<div class="empty">No candidates found.<br>This is a valid negative model result.</div>';
-    map.setView([53.876, -1.548], 14);
+    map.setView([54.5, -2.5], 6);
     return;
   }
   observations.forEach(item => {
@@ -86,9 +103,9 @@ function render() {
     card.id = 'card-' + item.object_id;
     card.className = 'card ' + status;
     const score = item.score === null ? 'not supplied' : Number(item.score).toFixed(3);
-    card.innerHTML = '<span class="badge">' + status + '</span><h2>' + item.prompt + '</h2>' +
-      '<div class="meta">SAM score: ' + score + '<br>' + item.recorded_utc + '<br>Source offset: ' + item.best_source_seconds.toFixed(1) + ' s</div>' +
-      (item.evidence ? '<a href="' + item.evidence + '" target="_blank"><img src="' + item.evidence + '" alt="SAM segmentation evidence"></a>' : '') +
+    card.innerHTML = '<span class="badge">' + esc(status) + '</span><h2>' + esc(item.prompt) + '</h2>' +
+      '<div class="meta">SAM score: ' + esc(score) + '<br>' + esc(item.recorded_utc) + '<br>Source offset: ' + Number(item.best_source_seconds).toFixed(1) + ' s</div>' +
+      (item.evidence ? '<a href="' + esc(item.evidence) + '" target="_blank"><img src="' + esc(item.evidence) + '" alt="SAM segmentation evidence"></a>' : '') +
       '<div class="actions"><button class="confirm">Confirm</button><button class="reject">Reject</button></div>';
     card.querySelector('.confirm').onclick = () => setStatus(item, 'confirmed');
     card.querySelector('.reject').onclick = () => setStatus(item, 'rejected');
@@ -97,27 +114,41 @@ function render() {
       const point = [item.latitude, item.longitude];
       bounds.push(point);
       const marker = L.circleMarker(point, {radius: 10, weight: 3, color: colour(status), fillColor: colour(status), fillOpacity: .55}).addTo(map);
-      marker.bindPopup('<b>' + item.prompt + '</b><br>Camera GPS · ' + item.recorded_utc);
+      marker.bindPopup('<b>' + esc(item.prompt) + '</b><br>Camera GPS · ' + esc(item.recorded_utc));
       marker.on('click', () => card.scrollIntoView({behavior: 'smooth', block: 'center'}));
       markers.set(item.object_id, marker);
     }
   });
   if (bounds.length) map.fitBounds(bounds, {padding: [80, 80], maxZoom: 17});
-  else map.setView([53.876, -1.548], 14);
+  else map.setView([54.5, -2.5], 6);
+  updateExport();
 }
-document.getElementById('download').onclick = () => {
-  const features = observations.map(item => ({
+function download(onlyConfirmed) {
+  const reviewed = observations.map(item => ({...item, review_status: statusFor(item)}));
+  const subset = onlyConfirmed ? reviewed.filter(item => item.review_status === 'confirmed') : reviewed;
+  if (onlyConfirmed && !subset.length) return;
+  const features = subset.map(item => ({
     type: 'Feature',
     geometry: item.latitude === null ? null : {type: 'Point', coordinates: [item.longitude, item.latitude]},
-    properties: {...item, review_status: statusFor(item)}
+    properties: item
   }));
-  const blob = new Blob([JSON.stringify({type: 'FeatureCollection', features}, null, 2)], {type: 'application/geo+json'});
+  const payload = {
+    type: 'FeatureCollection',
+    metadata: {
+      export_mode: onlyConfirmed ? 'human_confirmed_only' : 'full_audit',
+      location_note: 'Points are Garmin camera GPS positions, not surveyed defect coordinates.'
+    },
+    features
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/geo+json'});
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'roadlens-reviewed.geojson';
+  link.download = onlyConfirmed ? 'roadlens-confirmed-hazards.geojson' : 'roadlens-audit-all.geojson';
   link.click();
   URL.revokeObjectURL(link.href);
-};
+}
+document.getElementById('download').onclick = () => download(true);
+document.getElementById('downloadAudit').onclick = () => download(false);
 render();
 </script>
 </body>
@@ -135,7 +166,20 @@ def generate_report(output_directory: Path, tile_url: str) -> Path:
             evidence if (output_directory / evidence).is_file() else None
         )
     payload = json.dumps(observations).replace("</", "<\\/")
-    page = _PAGE.replace("__OBSERVATIONS__", payload).replace("__TILE_URL__", tile_url)
+    # Stable across VLM triage rewrites, distinct for different runs/results.
+    identity = [
+        [o.get("object_id"), o.get("best_frame_index"), o.get("best_source_seconds")]
+        for o in observations
+    ]
+    run_id = hashlib.sha256(
+        json.dumps([str(output_directory.resolve()), identity]).encode("utf-8")
+    ).hexdigest()[:16]
+    # Substitute observation data last so its text cannot inject placeholders.
+    page = (
+        _PAGE.replace("__TILE_URL__", tile_url)
+        .replace("__RUN_ID__", run_id)
+        .replace("__OBSERVATIONS__", payload)
+    )
     target = output_directory / "index.html"
     target.write_text(page, encoding="utf-8")
     return target

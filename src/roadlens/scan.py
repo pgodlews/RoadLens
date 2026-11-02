@@ -307,6 +307,15 @@ def run_pass(
     return detections, timings
 
 
+def _source_signature(video: Path) -> dict:
+    stat = video.stat()
+    return {
+        "path": str(video.resolve()),
+        "size_bytes": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+
+
 def run_scan(args, backend_factory=None):
     prompt = getattr(args, "prompt", "pothole")
     if not isinstance(prompt, str) or not prompt.strip():
@@ -326,6 +335,14 @@ def run_scan(args, backend_factory=None):
         if previous["source_video"] != args.video.name:
             raise ValueError("Resume requires the same source video")
         if previous["status"] == "complete":
+            # Never return a completed manifest for a missing or replaced source.
+            if not args.video.is_file():
+                raise FileNotFoundError(args.video)
+            if previous.get("source_signature") not in (
+                None,
+                _source_signature(args.video),
+            ):
+                raise ValueError("Source file changed since the saved run")
             return previous
     elif args.output.exists() and any(args.output.iterdir()):
         raise ValueError("Use an empty output directory to avoid mixing runs")
@@ -378,11 +395,7 @@ def _run_scan(args, backend_factory=None):
         "status": "preparing",
         "source_video": args.video.name,
         "source_metadata": metadata,
-        "source_signature": {
-            "path": str(args.video.resolve()),
-            "size_bytes": args.video.stat().st_size,
-            "mtime_ns": args.video.stat().st_mtime_ns,
-        },
+        "source_signature": _source_signature(args.video),
         "settings": {
             key: str(value) if isinstance(value, Path) else value
             for key, value in vars(args).items()

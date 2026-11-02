@@ -135,6 +135,16 @@ def test_scan_audits_empty_frames_refines_and_exports_source_times(
     assert resumed["total_inference_seconds"] == result["total_inference_seconds"]
     assert len(resumed["resume_history"]) == 1
     assert json.loads((output / "observations.json").read_text()) == observations
+    # A completed resume still validates that the source is the same file.
+    assert run_scan(args, NoMoreInference)["status"] == "complete"
+    original = video.read_bytes()
+    video.write_bytes(original + b"\0")
+    with pytest.raises(ValueError, match="Source file changed"):
+        run_scan(args, NoMoreInference)
+    video.unlink()
+    with pytest.raises(FileNotFoundError):
+        run_scan(args, NoMoreInference)
+    video.write_bytes(original)
     args.spacing = 2
     with pytest.raises(ValueError, match="same scan settings"):
         run_scan(args, NoMoreInference)
@@ -161,6 +171,45 @@ def test_track_registry_only_merges_with_shared_visual_evidence(tmp_path):
     add(10, (0.6, 0.6, 0.2, 0.2), {})  # Same PTS, different defect.
     add(11, (0.1, 0.1, 0.2, 0.2), {})  # No shared PTS: don't assume identity.
     assert len(registry.merged()) == 3
+
+
+def test_retried_interrupted_chunk_does_not_duplicate_ledger_rows(tmp_path):
+    class Backend:
+        def __init__(self, fail_after=None):
+            self.fail_after = fail_after
+
+        def segment_video(self, path, prompt):
+            for index, _ in enumerate(sorted(path.glob("*.png"))):
+                if self.fail_after is not None and index == self.fail_after:
+                    raise RuntimeError("simulated crash mid-chunk")
+                yield FrameSegmentations(index, prompt, "local", ())
+
+    choices = [FrameChoice(t, 1, t, 1, "test") for t in range(6)]
+    paths = [tmp_path / f"{i}.png" for i in range(6)]
+    for path in paths:
+        path.touch()
+
+    def run(backend):
+        return run_pass(
+            backend, choices, paths, "coarse", tmp_path, TrackRegistry(), 4, 1
+        )
+
+    # First attempt: chunk 0 completes, chunk 3 crashes after writing 2 rows.
+    calls = iter([Backend(), Backend(fail_after=2)])
+
+    class Flaky:
+        def segment_video(self, path, prompt):
+            return next(calls).segment_video(path, prompt)
+
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        run(Flaky())
+    # Retry completes the interrupted chunk; a further resume replays both.
+    run(Backend())
+    run(Backend(fail_after=0))  # Would raise if any chunk were re-inferred.
+    ledger = (tmp_path / "frames.jsonl").read_text().splitlines()
+    rows = [json.loads(line) for line in ledger]
+    keys = [(row["chunk_offset"], row["frame_index"]) for row in rows]
+    assert len(keys) == len(set(keys)) == 4 + 3
 
 
 def test_incomplete_backend_output_cannot_pass_as_complete_coverage(tmp_path):
