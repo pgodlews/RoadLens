@@ -29,6 +29,7 @@ from roadlens.ride import (
     resolve_by_wall_clock,
 )
 from roadlens.vlm import (
+    _detection_box_for_observation,
     create_vlm_backend,
     format_deterministic_summary_report,
     triage_run_directory,
@@ -41,162 +42,344 @@ STUDIO_HTML = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RoadLens Studio · Post-Ride Workflow</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <style>
-    :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, sans-serif; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #0f1411; color: #edf2ec; }
-    header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #2d3a30; background: #151d17; }
-    header .brand { display: flex; align-items: baseline; gap: 12px; }
-    header strong { font-size: 20px; letter-spacing: -0.4px; }
-    header .sub { color: #9cb0a0; font-size: 12px; }
-    main { display: grid; grid-template-columns: 440px 1fr; height: calc(100vh - 60px); }
-    aside { overflow-y: auto; padding: 16px; background: #151d17; border-right: 1px solid #2d3a30; }
-    #map { width: 100%; height: 100%; background: #1f2922; }
-    .panel { background: #1c261f; border: 1px solid #314035; border-radius: 10px; padding: 13px; margin-bottom: 13px; }
-    .panel h2 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.4px; color: #b7c9ba; }
-    .muted { color: #9cb0a0; font-size: 12px; line-height: 1.5; }
-    label { display: block; font-size: 12px; color: #b7c9ba; margin: 8px 0 4px; }
-    input[type="text"], input[type="number"], select, textarea {
-      width: 100%; background: #111813; border: 1px solid #3a4a3e; color: #edf2ec;
-      border-radius: 7px; padding: 7px 9px; font-size: 13px; font-family: inherit;
+    :root {
+      color-scheme: dark;
+      --bg: #0E1012; --panel: #15181B; --raised: #1C2024; --raised-2: #1F2428; --line: #2A3036; --line-2: #353C43;
+      --text: #ECEEF0; --text-2: #C9D0D6; --muted: #9AA3AB; --faint: #8A939B;
+      --amber: #FFB020; --amber-ink: #1A1300; --amber-wash: #2A2312;
+      --blue: #5AB8FF; --blue-ink: #04121D; --grey: #8A939B;
+      --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+      font-family: Inter, system-ui, -apple-system, sans-serif;
     }
-    textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-size: 13px; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    header { height: 64px; display: flex; align-items: center; gap: 24px; padding: 0 22px; border-bottom: 1px solid var(--line); background: #121417; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .wordmark { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .wordmark span { font-weight: 500; color: var(--muted); margin-left: 6px; }
+    .stepper { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; }
+    .step { padding: 6px 10px; border-radius: 6px; color: var(--faint); }
+    .step.done { color: var(--text); }
+    .step.current { background: var(--amber); color: var(--amber-ink); font-weight: 600; }
+    .step-sep { color: #4A525A; }
+    .ride-status { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .ride-status .dot { width: 8px; height: 8px; border-radius: 50%; background: #4A525A; }
+    .ride-status.ready .dot { background: var(--blue); }
+    main { display: grid; grid-template-columns: 400px 1fr; height: calc(100vh - 64px); }
+    aside { overflow-y: auto; padding: 20px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 24px; }
+    section { display: flex; flex-direction: column; gap: 10px; }
+    .sec-head { display: flex; align-items: baseline; gap: 10px; }
+    .sec-num { font-family: var(--mono); font-size: 12px; color: var(--amber); }
+    h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 20px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .mono { font-family: var(--mono); }
+    label.field { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 4px 0 2px; }
+    input[type="text"], select, textarea {
+      width: 100%; height: 40px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 0 12px; font-size: 13px;
+    }
+    textarea { height: auto; min-height: 180px; padding: 10px 12px; resize: vertical; line-height: 1.5; font-family: var(--mono); font-size: 12px; }
+    input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
     .row { display: flex; gap: 8px; align-items: center; }
     .row > * { flex: 1; }
-    button {
-      border: 1px solid #495b4e; border-radius: 7px; padding: 7px 11px;
-      background: #263429; color: #edf2ec; cursor: pointer; font-size: 12px; font-weight: 500;
+    .row > .fit { flex: 0 0 auto; }
+    button { height: 40px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 9px; background: transparent; cursor: pointer; font-weight: 500; }
+    button:hover:not(:disabled) { background: var(--raised); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
+    button.primary:hover:not(:disabled) { background: #FFC24D; }
+    button.cta { height: 52px; border-radius: 12px; font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 10px; }
+    button.confirm-btn { background: var(--blue); border-color: var(--blue); color: var(--blue-ink); font-weight: 600; }
+    button.confirm-btn:hover:not(:disabled) { background: #7CC6FF; }
+    .card { padding: 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); }
+    .segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+    .segmented button { height: 34px; border: 0; border-radius: 7px; color: var(--muted); }
+    .segmented button.active { background: var(--line); color: var(--text); font-weight: 600; }
+    .dropzone { border: 1px dashed var(--line-2); border-radius: 10px; padding: 12px; text-align: center; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .dropzone.drag { border-color: var(--amber); background: var(--amber-wash); color: var(--text); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line-2); color: var(--text-2); }
+    .chip.active { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
+    .pass-item { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); cursor: pointer; }
+    .pass-item:has(input:checked) { border-color: var(--amber); }
+    .pass-item input { margin-top: 2px; accent-color: var(--amber); width: 16px; height: 16px; }
+    .pass-title { font-weight: 600; }
+    .pass-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; font-family: var(--mono); font-size: 12px; }
+    .pass-stats small { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .heading-pill { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 5px; background: var(--amber-wash); color: var(--amber); margin-left: 6px; }
+    .engines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .warn { background: #2A2312; border: 1px solid #6E5227; color: #F2CF8D; padding: 10px 12px; border-radius: 9px; font-size: 12px; line-height: 1.45; }
+    .guard { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .tile { padding: 8px 10px; border-radius: 8px; background: var(--raised); display: flex; flex-direction: column; gap: 2px; }
+    .tile b { font-family: var(--mono); font-size: 20px; font-weight: 500; }
+    .tile span { font-size: 11px; color: var(--muted); }
+    .queue { display: flex; flex-direction: column; gap: 2px; }
+    .q-row { display: flex; align-items: center; gap: 12px; width: 100%; height: auto; padding: 8px; border-radius: 10px; border: 1px solid transparent; text-align: left; }
+    .q-row.selected { background: var(--raised-2); border-color: var(--amber); }
+    .q-row img, .q-row .noimg { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: var(--raised); }
+    .q-row.rejected img { opacity: 0.45; }
+    .q-body { display: flex; flex-direction: column; gap: 5px; flex: 1 1 auto; min-width: 0; }
+    .q-top { display: flex; justify-content: space-between; gap: 6px; font-family: var(--mono); font-size: 12px; }
+    .q-top .score { color: var(--muted); }
+    .q-bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+    .q-bar span { display: block; height: 100%; background: var(--text-2); }
+    .q-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+    .q-meta .vlm { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+    .s-unreviewed { color: var(--amber); } .sdot.s-unreviewed { border: 2px solid var(--amber); }
+    .s-confirmed { color: var(--blue); } .sdot.s-confirmed { background: var(--blue); }
+    .s-rejected { color: var(--grey); } .sdot.s-rejected { background: var(--grey); }
+    .stage { position: relative; min-width: 0; }
+    #map { position: absolute; inset: 0; background: #111417; }
+    .leaflet-container { font-family: Inter, system-ui, sans-serif; background: #111417; }
+    .leaflet-bar a, .leaflet-bar a:hover { background: var(--panel); color: var(--text); border-color: var(--line); width: 40px; height: 40px; line-height: 40px; }
+    .leaflet-control-scale-line { background: rgba(21, 24, 27, 0.8); color: var(--muted); border-color: var(--muted); font-family: var(--mono); }
+    .leaflet-control-attribution { background: rgba(14, 16, 18, 0.8) !important; color: var(--faint); }
+    .leaflet-control-attribution a { color: var(--muted); }
+    .leaflet-tooltip { background: var(--panel); color: var(--text); border-color: var(--line); font-family: var(--mono); }
+    .float { position: absolute; z-index: 500; background: rgba(21, 24, 27, 0.96); border: 1px solid var(--line); border-radius: 14px; }
+    #jobCard { left: 20px; bottom: 20px; width: 380px; max-width: calc(100% - 40px); padding: 16px; display: none; flex-direction: column; gap: 12px; }
+    #jobCard.show { display: flex; }
+    .job-head { display: flex; justify-content: space-between; align-items: baseline; }
+    .job-head strong { font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .job-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+    .job-bar span { display: block; height: 100%; width: 0; background: var(--amber); transition: width 0.4s; }
+    .job-steps { display: flex; flex-direction: column; gap: 8px; }
+    .job-step { display: flex; align-items: center; gap: 10px; color: var(--faint); }
+    .job-step i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #4A525A; flex: 0 0 auto; }
+    .job-step.done { color: var(--text); } .job-step.done i { background: var(--blue); border-color: var(--blue); }
+    .job-step.active { color: var(--text); } .job-step.active i { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 4px rgba(255, 176, 32, 0.18); }
+    #mapHint { left: 20px; top: 20px; padding: 10px 14px; font-size: 12px; color: var(--muted); }
+    #reviewPane { position: absolute; inset: 0; z-index: 1100; background: var(--bg); display: none; grid-template-columns: minmax(0, 1fr) 360px; }
+    #reviewPane.open { display: grid; }
+    .viewer { padding: 20px; display: flex; flex-direction: column; gap: 14px; overflow: auto; min-width: 0; }
+    .viewer-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+    .viewer-head h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 34px; letter-spacing: 0.03em; }
+    .status-tag { font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 6px; margin-left: 12px; text-transform: uppercase; vertical-align: middle; }
+    .status-tag.s-unreviewed { background: var(--amber-wash); }
+    .status-tag.s-confirmed { background: #0F2433; }
+    .status-tag.s-rejected { background: var(--raised); }
+    .evidence { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (max-width: 1180px) { .evidence { grid-template-columns: 1fr; } }
+    .frame-wrap { position: relative; min-width: 0; border-radius: 12px; overflow: hidden; background: var(--panel); }
+    .frame-wrap img { display: block; width: 100%; height: auto; }
+    .bbox { position: absolute; border: 2px solid var(--amber); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(14, 16, 18, 0.35); pointer-events: none; }
+    .bbox-label { position: absolute; transform: translateY(-100%); margin-top: -6px; font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--amber); color: var(--amber-ink); white-space: nowrap; }
+    .crop-wrap { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+    .crop { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; background-color: var(--panel); background-repeat: no-repeat; }
+    figcaption { display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .crop-wrap figcaption { font-family: inherit; line-height: 1.5; }
+    .decide { padding: 20px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+    .decide .card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; }
+    .kicker { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .verdict { font-family: var(--display); font-weight: 600; font-size: 24px; color: var(--amber); }
+    .verdict.v-calm { color: var(--text-2); }
+    .quote { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-2); }
+    .quote.clamp { display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+    .decide-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+    .decide-actions .confirm-btn { height: 56px; border-radius: 12px; font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .decide-actions .pair { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .decide-actions .pair button { height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    kbd { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 5px; background: rgba(255, 255, 255, 0.08); color: var(--muted); }
+    .confirm-btn kbd { background: rgba(4, 18, 29, 0.15); color: var(--blue-ink); }
+    .view-toggle { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+    .view-toggle button { height: 34px; border: 0; border-radius: 7px; color: var(--muted); }
+    .view-toggle button.active { background: var(--line); color: var(--text); font-weight: 600; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; grid-template-rows: auto 70vh; height: auto; }
+      aside { order: 2; }
+      #reviewPane.open { grid-template-columns: 1fr; position: fixed; overflow: auto; }
+      header { flex-wrap: wrap; height: auto; padding: 12px 16px; }
     }
-    button:hover:not(:disabled) { background: #344739; }
-    button:disabled { opacity: 0.45; cursor: not-allowed; }
-    button.primary { background: #2b6b3e; border-color: #46915c; }
-    button.primary:hover:not(:disabled) { background: #35804b; }
-    button.confirm { background: #286238; border-color: #4b8f5d; }
-    button.reject { background: #63332e; border-color: #96524b; }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-    .chip { padding: 5px 9px; border-radius: 999px; font-size: 11px; background: #222e25; border: 1px solid #3c4d40; cursor: pointer; }
-    .chip.active { background: #2b6b3e; border-color: #62b87b; color: #fff; }
-    .dropzone { border: 1px dashed #495b4e; border-radius: 8px; padding: 10px; text-align: center; font-size: 12px; color: #9cb0a0; margin-top: 8px; cursor: pointer; }
-    .dropzone.drag { border-color: #62b87b; background: #1e2f23; }
-    .pass-item { background: #131b15; border: 1px solid #2f3e33; border-radius: 8px; padding: 8px 10px; margin-top: 7px; font-size: 12px; }
-    .card { background: #131b15; border: 1px solid #344438; border-radius: 10px; padding: 11px; margin-top: 10px; }
-    .card.confirmed { border-color: #5ea86c; }
-    .card.rejected { opacity: 0.56; border-color: #7d4741; }
-    .card img { width: 100%; border-radius: 7px; margin: 8px 0; cursor: pointer; }
-    .badge { float: right; font-size: 10px; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: #2a362d; color: #e8b44d; }
-    .triage-pill { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 5px; margin-top: 4px; background: #243128; color: #cde2d1; }
-    .warn { background: #332616; border: 1px solid #6e5227; color: #f2cf8d; padding: 8px 10px; border-radius: 7px; font-size: 11px; margin-top: 8px; line-height: 1.4; }
-    @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 48% 52%; } aside { order: 2; } }
   </style>
 </head>
 <body>
 <header>
-  <div class="brand">
-    <strong>RoadLens Studio</strong>
-    <span class="sub">Bookended Human-in-the-Loop · Scope on OSM -> Targeted Scan/VLM -> Confirm & Export</span>
+  <div class="brand" title="Bookended Human-in-the-Loop · Scope on OSM -> Targeted Scan/VLM -> Confirm & Export">
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="none" stroke="#FFB020" stroke-width="2.5"/><path d="M10.5 24 L13 7 M17.5 24 L15 7" stroke="#ECEEF0" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M14 21 v-2.5 M14 15.5 v-2.5 M14 10.5 v-1.5" stroke="#FFB020" stroke-width="1.6" fill="none"/></svg>
+    <span class="wordmark">RoadLens<span>Studio</span></span>
   </div>
-  <span class="sub" id="rideStatus">No ride indexed yet</span>
+  <nav class="stepper" aria-label="Workflow" id="stepper"></nav>
+  <span class="ride-status" id="rideStatusWrap"><span class="dot"></span><span id="rideStatus">No ride indexed yet</span></span>
 </header>
 <main>
   <aside>
-    <div class="panel">
-      <h2>1. Load Ride Footage or Existing Scan</h2>
-      <label>Local Garmin clip (.MP4) or ride directory path</label>
+    <section>
+      <div class="sec-head"><span class="sec-num">01</span><h2>Ride</h2></div>
+      <label class="field" for="ridePath">Garmin clip (.MP4) or ride folder</label>
       <div class="row">
         <input id="ridePath" type="text" placeholder="/path/to/GRMS0010.MP4 or folder" value="__INITIAL_RIDE_PATH__">
-        <button id="loadRideBtn" class="primary" style="flex:0 0 auto">Index GPS</button>
+        <button id="loadRideBtn" class="primary fit">Index GPS</button>
       </div>
-      <div id="dropzone" class="dropzone">
-        Or drop / click to import a local .MP4 clip into workspace<input id="fileInput" type="file" accept=".mp4,.MP4" style="display:none">
+      <div id="dropzone" class="dropzone" role="button" tabindex="0">
+        Drop an .MP4 clip here, or click to import<input id="fileInput" type="file" accept=".mp4,.MP4" style="display:none">
       </div>
-      <label style="margin-top:10px">Or open an existing scan/analyze output folder</label>
+      <label class="field" for="existingRunPath">Or reopen a scan folder</label>
       <div class="row">
         <input id="existingRunPath" type="text" placeholder="artifacts/eccup-survey/return">
-        <button id="openRunBtn" style="flex:0 0 auto">Open Run</button>
+        <button id="openRunBtn" class="fit">Open run</button>
       </div>
-    </div>
+    </section>
 
-    <div class="panel">
-      <h2>2. Scope Road Fragment & Hazard</h2>
-      <div class="muted">Click two points along the blue GPS track on the map to select a road fragment (finds outbound + return passes), or resolve by street / time below:</div>
-      <div class="row" style="margin-top:8px">
-        <select id="queryMode" style="flex:0 0 135px">
-          <option value="street">Street name</option>
-          <option value="offset">Ride offset</option>
-          <option value="clock">Wall clock</option>
-        </select>
-        <input id="queryValue" type="text" placeholder="e.g. Eccup Moor Road, 20m, or 12:30">
-        <button id="resolveQueryBtn" style="flex:0 0 auto">Find</button>
+    <section>
+      <div class="sec-head"><span class="sec-num">02</span><h2>Scope a stretch</h2></div>
+      <div class="muted">Click two points on the ride track to select a stretch (outbound and return passes are both found), or search:</div>
+      <div class="segmented" role="group" aria-label="Search by">
+        <button type="button" data-mode="street" class="active">Street</button>
+        <button type="button" data-mode="offset">Ride time</button>
+        <button type="button" data-mode="clock">Clock</button>
       </div>
-      <div class="row" style="margin-top:6px">
-        <button id="clearMapSelBtn">Clear map selection</button>
+      <input id="queryMode" type="hidden" value="street">
+      <div class="row">
+        <input id="queryValue" type="text" aria-label="Search value" placeholder="Eccup Moor Road">
+        <button id="resolveQueryBtn" class="fit">Find</button>
       </div>
-      <div id="resolvedPasses"></div>
+      <div id="resolvedPasses" style="display:flex; flex-direction:column; gap:8px"></div>
+      <button id="clearMapSelBtn" type="button">Clear selection</button>
+    </section>
 
-      <label style="margin-top:10px">Hazard preset or custom description</label>
+    <section>
+      <div class="sec-head"><span class="sec-num">03</span><h2>Look for</h2></div>
       <div id="presetChips" class="chips"></div>
-      <input id="hazardPrompt" type="text" value="pothole" style="margin-top:6px" placeholder="Describe hazard (e.g. fallen tree branch)">
-
-      <div class="row" style="margin-top:8px">
+      <input id="hazardPrompt" type="text" value="pothole" aria-label="Hazard description" placeholder="Describe a hazard, e.g. fallen tree branch">
+      <div class="engines">
         <div>
-          <label>SAM 3.1 mode</label>
+          <label class="field" for="samMode">Segment · SAM 3.1</label>
           <select id="samMode">
-            <option value="scan_local">Local distance scan (~1m + refine)</option>
-            <option value="scan_coarse">Local coarse scan (~1m only)</option>
-            <option value="analyze_remote">Remote API clip pass</option>
+            <option value="scan_local">Local · 1 m + 30 fps refine</option>
+            <option value="scan_coarse">Local · 1 m coarse only</option>
+            <option value="analyze_remote">Remote Meta API</option>
           </select>
         </div>
         <div>
-          <label>VLM triage & report</label>
+          <label class="field" for="vlmMode">Triage · VLM</label>
           <select id="vlmMode">
-            <option value="local">Local Muse Glimmer</option>
-            <option value="none">Skip VLM (fast template)</option>
+            <option value="local">Muse Glimmer (local)</option>
+            <option value="none">Skip VLM (template)</option>
             <option value="remote">Remote API VLM</option>
           </select>
         </div>
       </div>
       <div id="remotePrivacyWarn" class="warn" style="display:none">
-        Remote API notice: selected video frames (with bottom Garmin GPS bar masked on VLM calls) will be sent to the configured remote API endpoint.
+        Remote mode sends selected frames to the configured API endpoint. The burned-in Garmin GPS bar is masked on remote VLM calls.
       </div>
-      <div class="row" style="margin-top:10px">
-        <button id="runScanBtn" class="primary" disabled>Scan Selected Pass(es)</button>
-      </div>
-      <div id="jobStatus" class="muted" style="margin-top:8px"></div>
-    </div>
+      <button id="runScanBtn" class="primary cta" disabled>
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M5 3 L15 9 L5 15 Z" fill="#1A1300"/></svg>
+        Scan selected pass
+      </button>
+      <div id="jobStatus" class="muted mono" aria-live="polite"></div>
+    </section>
 
-    <div class="panel">
-      <h2>3. Human Review & Summary Report</h2>
-      <div class="muted" id="reviewSummary">Load or run a targeted scan to review candidate overlays. Unreviewed model candidates are never exported as confirmed hazards.</div>
-      <div class="row" style="margin-top:8px">
-        <button id="triageRunBtn" disabled>Run VLM Triage</button>
-        <button id="draftReportBtn" disabled>Draft Summary Report</button>
+    <section>
+      <div class="sec-head"><span class="sec-num">04</span><h2>Review &amp; export</h2></div>
+      <div class="muted" id="reviewSummary">Run or open a scan to review candidates. Unreviewed model candidates are never exported as confirmed hazards.</div>
+      <div class="tiles" id="reviewTiles" style="display:none">
+        <div class="tile"><b class="s-unreviewed" id="cntUnreviewed">0</b><span>unreviewed</span></div>
+        <div class="tile"><b class="s-confirmed" id="cntConfirmed">0</b><span>confirmed</span></div>
+        <div class="tile"><b class="s-rejected" id="cntRejected">0</b><span>rejected</span></div>
       </div>
-      <div id="reportSection" style="display:none; margin-top:10px">
-        <label>Editable Summary Report (verify before manual council / FixMyStreet submission)</label>
+      <div id="candidateCards" class="queue"></div>
+      <div class="row">
+        <button id="triageRunBtn" disabled>Run VLM triage</button>
+        <button id="draftReportBtn" disabled>Draft report</button>
+      </div>
+      <div id="reportSection" style="display:none; flex-direction:column; gap:8px">
+        <label class="field" for="reportEditor">Summary report draft · check before any manual council / FixMyStreet submission</label>
         <textarea id="reportEditor"></textarea>
-        <div class="row" style="margin-top:6px">
-          <button id="saveReportBtn">Save Draft</button>
+        <div class="row">
+          <button id="saveReportBtn">Save draft</button>
           <button id="downloadReportBtn">Download .md</button>
         </div>
       </div>
-      <div class="row" style="margin-top:10px">
-        <button id="exportConfirmedBtn" class="primary" disabled>Export Confirmed GeoJSON (0)</button>
-        <button id="exportAuditBtn" disabled>Full Audit GeoJSON</button>
+      <div class="row">
+        <button id="exportConfirmedBtn" class="confirm-btn" disabled>Export confirmed (0)</button>
+        <button id="exportAuditBtn" class="fit" disabled>Full audit</button>
       </div>
-      <div id="candidateCards"></div>
+    </section>
+
+    <div class="guard">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="flex:0 0 auto; margin-top:1px"><path d="M8 1.5 L13.5 3.5 V8 C13.5 11 11 13.5 8 14.5 C5 13.5 2.5 11 2.5 8 V3.5 Z" fill="none" stroke="#9AA3AB" stroke-width="1.4"/></svg>
+      <span>Bookended Human-in-the-Loop: you scope the stretch and you confirm every hazard. Nothing is submitted automatically.</span>
     </div>
   </aside>
-  <div id="map"></div>
+
+  <div class="stage">
+    <div id="map"></div>
+    <div id="mapHint" class="float">Index a ride, then click two points on its track.</div>
+    <div id="jobCard" class="float" aria-live="polite">
+      <div class="job-head"><strong id="jobTitle">Scanning</strong><span class="mono muted" id="jobClock">0:00</span></div>
+      <div class="job-bar"><span id="jobBar"></span></div>
+      <div class="job-steps" id="jobSteps"></div>
+    </div>
+
+    <div id="reviewPane" role="dialog" aria-label="Candidate review">
+      <div class="viewer">
+        <div class="viewer-head">
+          <div><h1 style="display:inline" id="rvTitle">Candidate</h1><span class="status-tag" id="rvStatus"></span></div>
+          <div class="row" style="flex:0 0 auto">
+            <div class="view-toggle" role="group" aria-label="Evidence view">
+              <button type="button" data-view="box" class="active">Box</button>
+              <button type="button" data-view="mask">SAM mask</button>
+              <button type="button" data-view="raw">Raw</button>
+            </div>
+            <button type="button" id="rvClose" class="fit">Map <kbd>Esc</kbd></button>
+          </div>
+        </div>
+        <div class="evidence">
+          <figure style="margin:0; min-width:0; display:flex; flex-direction:column; gap:8px">
+            <div class="frame-wrap" id="rvFrameWrap">
+              <img id="rvFrame" alt="Camera frame for the selected candidate">
+              <div class="bbox" id="rvBox"></div>
+              <span class="bbox-label" id="rvBoxLabel"></span>
+            </div>
+            <figcaption><span id="rvFrameCaption"></span><span id="rvFrameSize"></span></figcaption>
+          </figure>
+          <figure class="crop-wrap" style="margin:0">
+            <div class="crop" id="rvCrop" role="img" aria-label="Unmasked close-up of the candidate"></div>
+            <figcaption>Unmasked 1:1 close-up: the view the VLM triages, so the mask never hides the surface texture.</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="decide">
+        <div class="card" id="rvTriage"></div>
+        <div class="card">
+          <span class="kicker">Camera GPS</span>
+          <span class="mono" style="font-size:15px" id="rvGps"></span>
+          <span class="mono muted" id="rvWhen"></span>
+          <span class="muted">Where the bike was when the frame was captured, not a surveyed defect position.</span>
+        </div>
+        <div class="decide-actions">
+          <button type="button" class="confirm-btn" id="rvConfirm">
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10.5 l4 4 L16 6" stroke="#04121D" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Confirm hazard <kbd>C</kbd>
+          </button>
+          <div class="pair">
+            <button type="button" id="rvPrev">Prev <kbd>&larr;</kbd></button>
+            <button type="button" id="rvReject">Reject <kbd>X</kbd></button>
+            <button type="button" id="rvNext">Next <kbd>&rarr;</kbd></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
 <script src="https://unpkg.com/protomaps-leaflet@5.0.0/dist/protomaps-leaflet.js"></script>
 <script>
 const PRESETS = __HAZARD_PRESETS__;
-const map = L.map('map', {zoomControl: true}).setView([53.85, -1.54], 12);
+const AMBER = '#FFB020', BLUE = '#5AB8FF', GREY = '#8A939B', TRACK = '#C9D2DA';
+const map = L.map('map', {zoomControl: false}).setView([53.85, -1.54], 12);
+L.control.zoom({position: 'bottomright'}).addTo(map);
+L.control.scale({position: 'bottomright', imperial: false}).addTo(map);
 try {
   if (window.protomapsL && protomapsL.leafletLayer) {
-    protomapsL.leafletLayer({url: '/__roadlens_osm.pmtiles', flavor: 'dark', attribution: '© OpenStreetMap contributors'}).addTo(map);
+    protomapsL.leafletLayer({url: '/__roadlens_osm.pmtiles', flavor: 'dark', attribution: '© OpenStreetMap contributors · offline PMTiles'}).addTo(map);
   } else {
     const archive = new pmtiles.PMTiles('/__roadlens_osm.pmtiles');
     pmtiles.leafletRasterLayer(archive, {attribution: '© OpenStreetMap contributors', maxZoom: 19}).addTo(map);
@@ -204,16 +387,16 @@ try {
 } catch (err) {
   console.warn('Basemap layer fallback:', err);
 }
-
 const rideLayer = L.layerGroup().addTo(map);
 const passLayer = L.layerGroup().addTo(map);
 const clickLayer = L.layerGroup().addTo(map);
 const candidateLayer = L.layerGroup().addTo(map);
 const candidateMarkers = new Map();
-
 let currentPasses = [];
 let mapClicks = [];
 let activeRun = null;
+let reviewIndex = -1;
+let evidenceView = 'box';
 
 function esc(val) {
   return String(val ?? '')
@@ -223,11 +406,22 @@ function esc(val) {
     .replace(/"/g, '&quot;');
 }
 
+const STEPS = ['Scope', 'Scan', 'Triage', 'Review', 'Export'];
+function setStep(current) {
+  const idx = STEPS.indexOf(current);
+  document.getElementById('stepper').innerHTML = STEPS.map((s, i) =>
+    '<span class="step ' + (i === idx ? 'current' : i < idx ? 'done' : '') + '">' + s + '</span>' +
+    (i < STEPS.length - 1 ? '<span class="step-sep" aria-hidden="true">›</span>' : '')
+  ).join('');
+}
+setStep('Scope');
+
 function renderPresets() {
   const wrap = document.getElementById('presetChips');
   const input = document.getElementById('hazardPrompt');
   PRESETS.forEach((p, idx) => {
-    const el = document.createElement('span');
+    const el = document.createElement('button');
+    el.type = 'button';
     el.className = 'chip' + (idx === 0 ? ' active' : '');
     el.textContent = p.label;
     el.title = p.description;
@@ -240,6 +434,16 @@ function renderPresets() {
   });
 }
 renderPresets();
+
+const QUERY_HINTS = {street: 'Eccup Moor Road', offset: '20m or 1h05m', clock: '12:30'};
+document.querySelectorAll('.segmented button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.segmented button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('queryMode').value = btn.dataset.mode;
+    document.getElementById('queryValue').placeholder = QUERY_HINTS[btn.dataset.mode];
+  };
+});
 
 function updatePrivacyBanner() {
   const sam = document.getElementById('samMode').value;
@@ -264,14 +468,19 @@ function drawRideTrack(ridePayload) {
   rideLayer.clearLayers();
   passLayer.clearLayers();
   mapClicks = [];
+  currentPasses = [];
   clickLayer.clearLayers();
+  document.getElementById('resolvedPasses').innerHTML = '';
+  document.getElementById('runScanBtn').disabled = true;
   const summary = ridePayload.ride;
   document.getElementById('rideStatus').textContent =
-    summary.primary_clip_count + ' clip(s) · ' +
+    summary.primary_clip_count + ' clips · ' +
     (summary.total_distance_m / 1000).toFixed(1) + ' km · ' +
     Math.round(summary.total_elapsed_seconds / 60) + ' min';
+  document.getElementById('rideStatusWrap').classList.add('ready');
+  document.getElementById('mapHint').textContent = 'Click two points on the track to scope a stretch.';
   const geo = L.geoJSON(ridePayload.geojson, {
-    style: {color: '#4da3ff', weight: 4, opacity: 0.82}
+    style: {color: TRACK, weight: 3, opacity: 0.55}
   }).addTo(rideLayer);
   geo.on('click', (ev) => {
     L.DomEvent.stopPropagation(ev);
@@ -288,9 +497,9 @@ async function handleMapPoint(latlng) {
     clickLayer.clearLayers();
   }
   mapClicks.push([latlng.lat, latlng.lng]);
-  L.circleMarker(latlng, {radius: 6, color: '#ff9f43', fillColor: '#ff9f43', fillOpacity: 0.9}).addTo(clickLayer);
+  L.circleMarker(latlng, {radius: 8, weight: 3, color: '#ECEEF0', fillColor: '#0E1012', fillOpacity: 1}).addTo(clickLayer);
   if (mapClicks.length === 2) {
-    L.polyline(mapClicks, {color: '#ff9f43', dashArray: '5,5', weight: 2}).addTo(clickLayer);
+    L.polyline(mapClicks, {color: AMBER, dashArray: '4,6', weight: 2}).addTo(clickLayer);
     const data = await api('/api/resolve', {
       method: 'POST',
       body: JSON.stringify({mode: 'corridor', polyline: mapClicks})
@@ -324,17 +533,24 @@ function setResolvedPasses(passes) {
   const allBounds = [];
   wrap.innerHTML = passes.map((p, idx) => {
     if (p.polyline && p.polyline.length > 1) {
-      const line = L.polyline(p.polyline, {color: '#ff6b6b', weight: 6, opacity: 0.9}).addTo(passLayer);
+      L.polyline(p.polyline, {color: AMBER, weight: 20, opacity: 0.2, lineCap: 'round'}).addTo(passLayer);
+      const line = L.polyline(p.polyline, {color: AMBER, weight: 6, opacity: 1, lineCap: 'round'}).addTo(passLayer);
       allBounds.push(...p.polyline);
       line.bindPopup('Pass ' + esc(p.pass_index) + ' · ' + esc(p.clip_name));
     }
-    const street = [p.street_name, p.place_name].filter(Boolean).join(', ') || 'Unnamed road';
-    return '<div class="pass-item">' +
-      '<label style="margin:0"><input type="checkbox" class="passCheck" data-idx="' + idx + '" checked> ' +
-      '<b>Pass ' + esc(p.pass_index) + ': ' + esc(p.clip_name) + '</b> (' + p.start_seconds.toFixed(1) + '–' + p.end_seconds.toFixed(1) + ' s, ' +
-      Math.round(p.distance_m) + ' m ' + esc(p.compass_direction || '') + ')</label>' +
-      '<div class="muted">' + esc(street) + ' · ~' + p.estimated_coarse_frames_1m + ' coarse / ' + p.estimated_native_frames + ' native frames</div>' +
-      '</div>';
+    const street = [p.street_name, p.place_name].filter(Boolean).join(' · ') || 'Unnamed road';
+    return '<label class="pass-item">' +
+      '<input type="checkbox" class="passCheck" data-idx="' + idx + '" checked>' +
+      '<span style="flex:1; min-width:0">' +
+      '<span class="pass-title">Pass ' + esc(p.pass_index) + ' · ' + esc(p.clip_name) + '</span>' +
+      '<span class="heading-pill">' + esc(p.compass_direction || '–') + '</span>' +
+      '<span class="pass-stats">' +
+      '<span><small>window</small>' + p.start_seconds.toFixed(0) + '–' + p.end_seconds.toFixed(0) + ' s</span>' +
+      '<span><small>distance</small>' + Math.round(p.distance_m) + ' m</span>' +
+      '<span><small>frames</small>~' + esc(p.estimated_coarse_frames_1m) + '</span>' +
+      '</span>' +
+      '<span class="muted" style="display:block; margin-top:6px">' + esc(street) + '</span>' +
+      '</span></label>';
   }).join('');
   if (allBounds.length) map.fitBounds(allBounds, {padding: [60, 60], maxZoom: 16});
   document.getElementById('runScanBtn').disabled = false;
@@ -355,6 +571,7 @@ document.getElementById('loadRideBtn').onclick = async () => {
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 dropzone.onclick = () => fileInput.click();
+dropzone.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } };
 dropzone.ondragover = (e) => { e.preventDefault(); dropzone.classList.add('drag'); };
 dropzone.ondragleave = () => dropzone.classList.remove('drag');
 dropzone.ondrop = async (e) => {
@@ -393,6 +610,9 @@ document.getElementById('resolveQueryBtn').onclick = async () => {
     alert('Resolve error: ' + err.message);
   }
 };
+document.getElementById('queryValue').onkeydown = (e) => {
+  if (e.key === 'Enter') document.getElementById('resolveQueryBtn').click();
+};
 
 document.getElementById('openRunBtn').onclick = async () => {
   const path = document.getElementById('existingRunPath').value.trim();
@@ -405,6 +625,40 @@ document.getElementById('openRunBtn').onclick = async () => {
   }
 };
 
+const JOB_STAGES = [
+  {key: 'prep', label: 'Sample a sharp frame every metre'},
+  {key: 'sam', label: 'Segment with SAM 3.1'},
+  {key: 'vlm', label: 'Triage with the VLM'},
+  {key: 'done', label: 'Ready for your review'}
+];
+function jobStage(job) {
+  const text = (job.progress || '').toLowerCase();
+  if (job.status === 'complete') return 4;
+  if (text.includes('vlm') || text.includes('triage')) return 2;
+  if (text.includes('pass')) return 1;
+  return 0;
+}
+let jobTimer = null;
+function showJob(job, startedAt) {
+  const card = document.getElementById('jobCard');
+  card.classList.add('show');
+  const stage = jobStage(job);
+  const failed = job.status === 'failed';
+  document.getElementById('jobTitle').textContent = failed ? 'Scan failed' : stage >= 4 ? 'Scan complete' : stage === 2 ? 'Triaging' : 'Scanning';
+  document.getElementById('jobBar').style.width = Math.min(100, [8, 45, 80, 100, 100][stage]) + '%';
+  document.getElementById('jobBar').style.background = failed ? '#C0524A' : stage >= 4 ? BLUE : AMBER;
+  document.getElementById('jobSteps').innerHTML = JOB_STAGES.map((s, i) =>
+    '<div class="job-step ' + (i < stage || stage >= 4 ? 'done' : i === stage ? 'active' : '') + '"><i></i><span>' + esc(s.label) + '</span></div>'
+  ).join('') + (job.progress ? '<div class="muted mono">' + esc(job.progress) + '</div>' : '');
+  clearInterval(jobTimer);
+  if (job.status === 'running') {
+    jobTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      document.getElementById('jobClock').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }, 1000);
+  }
+}
+
 document.getElementById('runScanBtn').onclick = async () => {
   const checks = [...document.querySelectorAll('.passCheck:checked')];
   const chosen = checks.map(c => currentPasses[Number(c.dataset.idx)]);
@@ -414,6 +668,7 @@ document.getElementById('runScanBtn').onclick = async () => {
   const vlm_mode = document.getElementById('vlmMode').value;
   document.getElementById('runScanBtn').disabled = true;
   document.getElementById('jobStatus').textContent = 'Starting targeted job...';
+  setStep('Scan');
   try {
     const job = await api('/api/jobs', {
       method: 'POST',
@@ -428,15 +683,19 @@ document.getElementById('runScanBtn').onclick = async () => {
 
 async function pollJob(jobId) {
   const statusEl = document.getElementById('jobStatus');
+  const startedAt = Date.now();
   const tick = async () => {
     const job = await api('/api/jobs/' + jobId);
     statusEl.textContent = '[' + job.status + '] ' + (job.progress || '');
+    showJob(job, startedAt);
+    if (jobStage(job) === 2) setStep('Triage');
     if (job.status === 'complete' && job.run) {
       document.getElementById('runScanBtn').disabled = false;
       renderRun(job.run);
       return;
     }
     if (job.status === 'failed') {
+      statusEl.textContent = 'Failed: ' + (job.error || job.progress || 'see server log');
       document.getElementById('runScanBtn').disabled = false;
       return;
     }
@@ -446,7 +705,12 @@ async function pollJob(jobId) {
 }
 
 function markerColour(status) {
-  return status === 'confirmed' ? '#61ba73' : status === 'rejected' ? '#a25b52' : '#e8b44d';
+  return status === 'confirmed' ? BLUE : status === 'rejected' ? GREY : AMBER;
+}
+
+function vlmLabel(triage) {
+  if (!triage || !triage.classification) return 'not triaged';
+  return String(triage.classification).replace(/_/g, ' ');
 }
 
 function updateCounts() {
@@ -456,71 +720,190 @@ function updateCounts() {
   const rejected = obs.filter(o => o.review_status === 'rejected').length;
   const unreviewed = obs.length - confirmed - rejected;
   document.getElementById('reviewSummary').innerHTML =
-    '<b>' + obs.length + '</b> candidate(s) in <code>' + esc(activeRun.run_name) + '</code>: ' +
-    '<b>' + confirmed + '</b> confirmed · <b>' + unreviewed + '</b> unreviewed · <b>' + rejected + '</b> rejected.';
+    '<b>' + obs.length + '</b> candidate(s) in <code>' + esc(activeRun.run_name) + '</code>, sorted by SAM score. Click one to review it.';
+  document.getElementById('reviewTiles').style.display = obs.length ? 'grid' : 'none';
+  document.getElementById('cntUnreviewed').textContent = unreviewed;
+  document.getElementById('cntConfirmed').textContent = confirmed;
+  document.getElementById('cntRejected').textContent = rejected;
   const btn = document.getElementById('exportConfirmedBtn');
-  btn.textContent = 'Export Confirmed GeoJSON (' + confirmed + ')';
+  btn.textContent = 'Export confirmed (' + confirmed + ')';
   btn.disabled = confirmed === 0;
   document.getElementById('exportAuditBtn').disabled = obs.length === 0;
   document.getElementById('triageRunBtn').disabled = obs.length === 0;
   document.getElementById('draftReportBtn').disabled = false;
+  setStep(confirmed > 0 ? 'Export' : 'Review');
+}
+
+function queueRowHtml(item, idx) {
+  const score = item.score === null || item.score === undefined ? null : Number(item.score);
+  const thumb = item.frame_url || item.overlay_url;
+  const status = item.review_status;
+  return '<button type="button" class="q-row ' + esc(status) + (idx === reviewIndex ? ' selected' : '') + '" data-idx="' + idx + '">' +
+    (thumb ? '<span class="noimg" style="' + cropStyle(item, 52) + '" aria-hidden="true"></span>' : '<span class="noimg"></span>') +
+    '<span class="q-body">' +
+    '<span class="q-top"><span>#' + esc(item.object_id) + ' · ' + Number(item.best_source_seconds).toFixed(2) + ' s</span><span class="score">' + (score === null ? 'n/a' : score.toFixed(3)) + '</span></span>' +
+    '<span class="q-bar"><span style="width:' + Math.round((score || 0) * 100) + '%"></span></span>' +
+    '<span class="q-meta"><span class="sdot s-' + esc(status) + '"></span><span class="s-' + esc(status) + '">' + esc(status) + '</span><span class="vlm">· ' + esc(vlmLabel(item.vlm_triage)) + '</span></span>' +
+    '</span></button>';
+}
+
+function sortedObservations(run) {
+  return [...run.observations].sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
+}
+
+function renderQueue() {
+  const container = document.getElementById('candidateCards');
+  container.innerHTML = activeRun.ordered.map(queueRowHtml).join('');
+  container.querySelectorAll('.q-row').forEach(row => {
+    row.onclick = () => openReview(Number(row.dataset.idx));
+  });
 }
 
 function renderRun(run) {
+  run.ordered = sortedObservations(run);
   activeRun = run;
   candidateLayer.clearLayers();
   candidateMarkers.clear();
-  const container = document.getElementById('candidateCards');
-  container.innerHTML = '';
   const bounds = [];
 
   if (run.summary_report) {
-    document.getElementById('reportSection').style.display = 'block';
+    document.getElementById('reportSection').style.display = 'flex';
     document.getElementById('reportEditor').value = run.summary_report;
   } else {
     document.getElementById('reportSection').style.display = 'none';
   }
 
-  run.observations.forEach(item => {
-    const card = document.createElement('article');
-    card.id = 'cand-' + item.object_id;
-    card.className = 'card ' + item.review_status;
-    const score = item.score === null || item.score === undefined ? 'n/a' : Number(item.score).toFixed(3);
-    const triage = item.vlm_triage;
-    const triageHtml = triage
-      ? '<div class="triage-pill">VLM: <b>' + esc(triage.classification) + '</b> (' + esc(triage.confidence) + ')</div>' +
-        '<div class="muted" style="margin-top:4px">' + esc(triage.visual_description || '') + '</div>'
-      : '';
-    const imgUrl = item.overlay_url || item.frame_url;
-    card.innerHTML =
-      '<span class="badge">' + esc(item.review_status) + '</span>' +
-      '<strong>#' + esc(item.object_id) + ' · ' + esc(item.prompt) + '</strong>' +
-      '<div class="muted">SAM score: ' + score + ' · t=' + Number(item.best_source_seconds).toFixed(2) + 's</div>' +
-      triageHtml +
-      (imgUrl ? '<a href="' + esc(imgUrl) + '" target="_blank"><img src="' + esc(imgUrl) + '" loading="lazy" alt="Candidate evidence"></a>' : '') +
-      '<div class="row"><button class="confirm">Confirm Hazard</button><button class="reject">Reject (Patch/Debris)</button></div>';
-
-    card.querySelector('.confirm').onclick = () => setDecision(item, 'confirmed');
-    card.querySelector('.reject').onclick = () => setDecision(item, 'rejected');
-    container.appendChild(card);
-
+  run.ordered.forEach((item, idx) => {
     if (item.latitude !== null && item.longitude !== null) {
       const pt = [item.latitude, item.longitude];
       bounds.push(pt);
       const m = L.circleMarker(pt, {
-        radius: 9, weight: 2,
-        color: markerColour(item.review_status),
-        fillColor: markerColour(item.review_status),
-        fillOpacity: 0.65
+        radius: 8, weight: 2, color: '#0E1012',
+        fillColor: markerColour(item.review_status), fillOpacity: 1
       }).addTo(candidateLayer);
-      m.bindPopup('<b>#' + esc(item.object_id) + ' ' + esc(item.prompt) + '</b><br>Camera GPS · ' + Number(item.best_source_seconds).toFixed(1) + 's');
-      m.on('click', () => card.scrollIntoView({behavior: 'smooth', block: 'center'}));
+      m.bindTooltip('#' + esc(item.object_id) + ' · ' + esc(item.review_status));
+      m.on('click', (ev) => { L.DomEvent.stopPropagation(ev); openReview(idx); });
       candidateMarkers.set(item.object_id, m);
     }
   });
-  if (bounds.length) map.fitBounds(bounds, {padding: [60, 60], maxZoom: 17});
+  renderQueue();
+  if (bounds.length) map.fitBounds(bounds, {padding: [80, 80], maxZoom: 18});
+  document.getElementById('mapHint').textContent = 'Click a candidate marker or a row in the list to review it.';
   updateCounts();
 }
+
+function frameAspect() {
+  const img = document.getElementById('rvFrame');
+  return img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 2688 / 2160;
+}
+
+function cropWindow(item, aspect) {
+  const box = item.box_xywh_normalized;
+  if (!box) return null;
+  const [x, y, w, h] = box.map(Number);
+  // Square window around the box, in normalised units of each axis.
+  let sidePxOverH = Math.min(1, Math.max(w * aspect, h, 0.16) * 2.0);
+  const sw = Math.min(1, sidePxOverH / aspect), sh = sidePxOverH;
+  const left = Math.min(Math.max(0, x + w / 2 - sw / 2), 1 - sw);
+  const top = Math.min(Math.max(0, y + h / 2 - sh / 2), 1 - sh);
+  return {sw, sh, left, top};
+}
+
+function cropStyle(item, sizePx) {
+  const url = item.frame_url || item.overlay_url;
+  const win = cropWindow(item, 2688 / 2160);
+  if (!url) return '';
+  if (!win) return 'background:url(' + esc(url) + ') center/cover';
+  const px = win.sw >= 1 ? 0 : (win.left / (1 - win.sw)) * 100;
+  const py = win.sh >= 1 ? 0 : (win.top / (1 - win.sh)) * 100;
+  return 'background-image:url(' + esc(url) + ');background-size:' + (100 / win.sw) + '% ' + (100 / win.sh) + '%;background-position:' + px + '% ' + py + '%;background-repeat:no-repeat';
+}
+
+function renderTriage(item) {
+  const t = item.vlm_triage;
+  const el = document.getElementById('rvTriage');
+  if (!t || !t.classification) {
+    el.innerHTML = '<span class="kicker">Model triage</span><span class="verdict v-calm">Not triaged yet</span>' +
+      '<span class="muted">Run VLM triage from the sidebar to get a second opinion. It never changes the review status.</span>';
+    return;
+  }
+  const calm = t.classification !== 'hazard_candidate';
+  el.innerHTML =
+    '<div style="display:flex; justify-content:space-between"><span class="kicker">Model triage · ' + esc(t.model || 'VLM') + '</span><span class="mono muted">' + esc(t.confidence || '') + '</span></div>' +
+    '<span class="verdict' + (calm ? ' v-calm' : '') + '">' + esc(vlmLabel(t)) + '</span>' +
+    (t.hazard_type || t.lane_position ? '<span style="color:var(--text-2)">' + esc([t.hazard_type, t.lane_position].filter(Boolean).join(' · ')) + '</span>' : '') +
+    (t.visual_description ? '<p class="quote clamp" title="Click to expand" onclick="this.classList.toggle(&quot;clamp&quot;)">' + esc(t.visual_description) + '</p>' : '') +
+    (t.uncertainty_note ? '<p class="quote muted" style="font-size:12px">Uncertainty: ' + esc(t.uncertainty_note) + '</p>' : '');
+}
+
+function paintEvidence() {
+  const item = activeRun.ordered[reviewIndex];
+  const img = document.getElementById('rvFrame');
+  const url = evidenceView === 'mask' ? (item.overlay_url || item.frame_url) : (item.frame_url || item.overlay_url);
+  if (img.getAttribute('src') !== url) img.setAttribute('src', url || '');
+  const box = item.box_xywh_normalized;
+  const showBox = evidenceView === 'box' && box;
+  const boxEl = document.getElementById('rvBox'), label = document.getElementById('rvBoxLabel');
+  boxEl.style.display = label.style.display = showBox ? 'block' : 'none';
+  if (showBox) {
+    const [x, y, w, h] = box.map(Number);
+    Object.assign(boxEl.style, {left: x * 100 + '%', top: y * 100 + '%', width: w * 100 + '%', height: h * 100 + '%'});
+    Object.assign(label.style, {left: x * 100 + '%', top: y * 100 + '%'});
+    label.textContent = 'SAM 3.1 · ' + (item.score === null ? 'n/a' : Number(item.score).toFixed(3));
+  }
+  const crop = document.getElementById('rvCrop');
+  const win = cropWindow(item, frameAspect());
+  const cropUrl = item.frame_url || item.overlay_url;
+  if (cropUrl && win) {
+    crop.style.backgroundImage = 'url(' + cropUrl + ')';
+    crop.style.backgroundSize = (100 / win.sw) + '% ' + (100 / win.sh) + '%';
+    crop.style.backgroundPosition = (win.sw >= 1 ? 0 : win.left / (1 - win.sw) * 100) + '% ' + (win.sh >= 1 ? 0 : win.top / (1 - win.sh) * 100) + '%';
+  } else {
+    crop.style.backgroundImage = cropUrl ? 'url(' + cropUrl + ')' : 'none';
+    crop.style.backgroundSize = 'cover';
+    crop.style.backgroundPosition = 'center';
+  }
+}
+document.getElementById('rvFrame').onload = () => {
+  const img = document.getElementById('rvFrame');
+  document.getElementById('rvFrameSize').textContent = img.naturalWidth + ' × ' + img.naturalHeight;
+  if (activeRun && reviewIndex >= 0) paintEvidence();
+};
+
+function openReview(idx) {
+  if (!activeRun || !activeRun.ordered.length) return;
+  reviewIndex = (idx + activeRun.ordered.length) % activeRun.ordered.length;
+  const item = activeRun.ordered[reviewIndex];
+  document.getElementById('reviewPane').classList.add('open');
+  document.getElementById('rvTitle').textContent = 'Candidate #' + item.object_id;
+  const tag = document.getElementById('rvStatus');
+  tag.textContent = item.review_status;
+  tag.className = 'status-tag s-' + item.review_status;
+  document.getElementById('rvFrameCaption').textContent = 'frame @ ' + Number(item.best_source_seconds).toFixed(2) + ' s · ' + item.prompt;
+  document.getElementById('rvGps').textContent = item.latitude === null ? 'unavailable' : Number(item.latitude).toFixed(5) + ', ' + Number(item.longitude).toFixed(5);
+  document.getElementById('rvWhen').textContent = item.recorded_utc ? new Date(item.recorded_utc).toISOString().replace('T', ' · ').slice(0, 21) + ' UTC' : '';
+  renderTriage(item);
+  paintEvidence();
+  renderQueue();
+  const m = candidateMarkers.get(item.object_id);
+  if (m) map.panTo(m.getLatLng());
+}
+
+function closeReview() {
+  document.getElementById('reviewPane').classList.remove('open');
+  reviewIndex = -1;
+  if (activeRun) renderQueue();
+  setTimeout(() => map.invalidateSize(), 0);
+}
+
+document.querySelectorAll('.view-toggle button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    evidenceView = btn.dataset.view;
+    if (reviewIndex >= 0) paintEvidence();
+  };
+});
 
 async function setDecision(item, status) {
   const res = await api('/api/runs/' + activeRun.run_id + '/review', {
@@ -528,15 +911,33 @@ async function setDecision(item, status) {
     body: JSON.stringify({object_id: item.object_id, review_status: status})
   });
   item.review_status = res.review_status;
-  const card = document.getElementById('cand-' + item.object_id);
-  card.className = 'card ' + status;
-  card.querySelector('.badge').textContent = status;
   if (candidateMarkers.has(item.object_id)) {
-    const col = markerColour(status);
-    candidateMarkers.get(item.object_id).setStyle({color: col, fillColor: col});
+    candidateMarkers.get(item.object_id).setStyle({fillColor: markerColour(status)});
+    candidateMarkers.get(item.object_id).setTooltipContent('#' + esc(item.object_id) + ' · ' + esc(status));
   }
   updateCounts();
 }
+
+async function decideAndAdvance(status) {
+  if (!activeRun || reviewIndex < 0) return;
+  await setDecision(activeRun.ordered[reviewIndex], status);
+  openReview(reviewIndex + 1);
+}
+document.getElementById('rvConfirm').onclick = () => decideAndAdvance('confirmed');
+document.getElementById('rvReject').onclick = () => decideAndAdvance('rejected');
+document.getElementById('rvNext').onclick = () => openReview(reviewIndex + 1);
+document.getElementById('rvPrev').onclick = () => openReview(reviewIndex - 1);
+document.getElementById('rvClose').onclick = closeReview;
+document.addEventListener('keydown', (e) => {
+  if (reviewIndex < 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+  const key = e.key.toLowerCase();
+  if (key === 'c') { e.preventDefault(); decideAndAdvance('confirmed'); }
+  else if (key === 'x') { e.preventDefault(); decideAndAdvance('rejected'); }
+  else if (key === 'arrowright' || key === 'j') { e.preventDefault(); openReview(reviewIndex + 1); }
+  else if (key === 'arrowleft' || key === 'k') { e.preventDefault(); openReview(reviewIndex - 1); }
+  else if (key === 'escape') { e.preventDefault(); closeReview(); }
+});
 
 document.getElementById('triageRunBtn').onclick = async () => {
   if (!activeRun) return;
@@ -559,7 +960,7 @@ document.getElementById('draftReportBtn').onclick = async () => {
   const res = await api('/api/runs/' + activeRun.run_id + '/draft-report', {
     method: 'POST', body: JSON.stringify({vlm_mode: vlm})
   });
-  document.getElementById('reportSection').style.display = 'block';
+  document.getElementById('reportSection').style.display = 'flex';
   document.getElementById('reportEditor').value = res.summary_report;
 };
 
@@ -672,6 +1073,14 @@ class StudioState:
             if str(oid) in decisions:
                 copy_item["review_status"] = decisions[str(oid)]
             fidx = int(copy_item.get("best_frame_index", oid))
+            result_path = run_dir / f"result-{fidx:06d}.json"
+            if result_path.is_file():
+                detections = json.loads(result_path.read_text(encoding="utf-8")).get(
+                    "detections", []
+                )
+                copy_item["box_xywh_normalized"] = _detection_box_for_observation(
+                    detections, copy_item.get("object_id")
+                )
             ov_name = f"overlay-{fidx:06d}.png"
             fr_name = f"frame-{fidx:06d}.png"
             copy_item["overlay_url"] = (

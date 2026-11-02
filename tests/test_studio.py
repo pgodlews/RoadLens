@@ -127,6 +127,18 @@ def studio_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     run_dir.mkdir()
     (run_dir / "overlay-000000.png").write_bytes(b"\x89PNG\r\n\x1a\nfake")
     (run_dir / "frame-000000.png").write_bytes(b"\x89PNG\r\n\x1a\nframe")
+    # Frame 0 shares its result file with another object to exercise box matching.
+    (run_dir / "result-000000.json").write_text(
+        json.dumps(
+            {
+                "detections": [
+                    {"object_id": 9, "box_xywh_normalized": [0.1, 0.1, 0.1, 0.1]},
+                    {"object_id": 0, "box_xywh_normalized": [0.4, 0.6, 0.2, 0.1]},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     (run_dir / "observations.json").write_text(
         json.dumps(
             [
@@ -311,6 +323,9 @@ def test_studio_human_review_and_report_workflow(studio_env):
     run_id = run["run_id"]
     assert len(run["observations"]) == 2
     assert run["observations"][0]["review_status"] == "unreviewed"
+    # The review pane draws each candidate's own box; no result file means none.
+    assert run["observations"][0]["box_xywh_normalized"] == [0.4, 0.6, 0.2, 0.1]
+    assert "box_xywh_normalized" not in run["observations"][1]
 
     # Serve evidence PNG & reject path traversal
     overlay_url = run["observations"][0]["overlay_url"]
