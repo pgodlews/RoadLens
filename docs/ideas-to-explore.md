@@ -25,3 +25,5 @@ Items in this document are optional future explorations, **not** required core d
     - **Camera lens height above road (`H_cam`):** `0.89 m ± 0.02 m` (`894 mm` unloaded; `~890 mm` with `~4 mm` rider tyre sag — `555 mm` perpendicular above the axle line plus `335 mm` loaded tyre radius; ~`10 cm` lower than a naive top-of-hoods guess because of the aero stack and under-bar mount).
     - **Longitudinal lens offset:** `~0.05 m` (`5 cm`) behind the front thru-axle (`~0.39 m` behind the front tyre's leading edge).
     - **Effective `2688×2160` (`5:4` EIS-stabilized) intrinsics (cross-checked via kinematic travel `v * dt`):** `fy / height ≈ 0.81 ± 0.03` (`fx / width ≈ 0.65`, effective `HFOV ≈ 75°`, `VFOV ≈ 63°`, typical pitch `~2°` downward with horizon near `y ≈ 0.47`). Cross-checking this homography on a rural single-track lane recovered a `3.05 m` carriageway width (matching standard `2.75–3.1 m` UK single-track lanes) and sized an elongated nearside cavity at `~15 cm × ~59 cm`.
+
+![Specialized Tarmac SL7 Size L Garmin Varia Vue camera geometry](samples/tarmac-sl7-camera-geometry.jpg)
