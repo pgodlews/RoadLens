@@ -144,42 +144,77 @@ around SAM's 15-frame hot-start period. Coverage checks now reject incomplete or
 duplicate backend frame output, manifests record the code revision and failure
 status, and 28 tests pass.
 
-## Road-wide scan observations (in progress)
+## Road-wide scan observations (outbound complete, return running)
 
 The outbound survey covers 150–360 s of `GRMS0010.MP4`; the return covers
-420 s to the end of `GRMS0012.MP4`. These include margins around the previously
-identified road corridor. Neither scan accepts or uses pothole pins for frame
-selection. The outbound plan selects 1,381 of 6,294 original frames over about
-1,380 m of integrated speed. All original frames have usable interpolated speed;
-the largest selected spatial gap is 1.48 m, illustrating why "one metre" is a
-target rather than a strict coverage guarantee.
+420 s to the end (600.6 s) of `GRMS0012.MP4`. Both intervals include margins
+around the previously identified road corridor. Neither scan accepts or uses
+pothole pins for frame selection. Aggregate sanitized metrics are recorded in
+`docs/evaluation/eccup-corridor-survey.json`.
 
-During inspection of the outbound first-pass ledger, a candidate at 159.027 s
-segments a small road-edge defect in the same scene as the earlier reported-location
-still at 158 s, which had no SAM detection. This is useful evidence that a nearby
-video view can succeed where a selected still failed. It does not isolate the
-benefit of sampling: internal thresholds, input handling and temporal context also
-changed. The candidate remains unreviewed; generated images remain local.
+### Outbound corridor (`GRMS0010.MP4`, 150–360 s) — completed
 
-### Recovery checkpoint
+- **Coverage:** 1,381 selected coarse frames out of 6,294 native frames across
+  1,380.1 m of integrated known speed (speed range 3.13–8.94 m/s, median
+  7.60 m/s). Zero frames lacked speed; zero native frame intervals exceeded the
+  1.0 m target; largest selected spatial gap was 1.48 m, illustrating why
+  "one metre" is a target rather than a strict coverage guarantee.
+- **Recovery verification:** After the initial run stalled during concurrent PNG
+  export in the first fine window (`a7baa61`), `--resume` at `e1d49cb` replayed
+  all 29 completed coarse chunks (1,829 inferences) directly from `frames.jsonl`
+  without repeating GPU work. Reverted serial lossless PNG export completed all
+  12 merged refinement windows (`fine-000`–`fine-011`, 102.5 s / 48.8% of the
+  corridor, 3,060 unique native frames, 66 chunks, 3,924 inferences including
+  16-frame overlap) without stalling. The exact root cause of the earlier
+  thread-pool stall was not proven, and concurrent PNG export remains reverted.
+- **Runtime:** Coarse SAM inference took 362.3 s; refinement SAM inference took
+  802.4 s; total SAM inference was **1,164.7 s** (19.4 min) across **5,753**
+  frame inferences. The resumed attempt finished in **1,696.2 s** wall time
+  (28.3 min, including 68.4 s timestamp/sharpness re-measurement, 12.9 s model
+  load, serial fine-window PNG export, and final overlay export; initial coarse
+  preparation took 147.2 s). This confirms that native-resolution 4K coarse+fine
+  scanning is a substantial offline batch job, not a near-realtime pass.
+- **Unreviewed candidate tracks:** **85 unreviewed tracks**, all linked to
+  `garmin_camera_gps`. Native-rate refinement supplied the highest-ranked
+  evidence frame for 72 of the 85 tracks (13 retained a coarse frame). Best
+  track scores ranged from 0.350 to 0.750 (median 0.405): 15 tracks scored
+  `>= 0.50`, 4 scored `>= 0.65`, and 1 scored `>= 0.75`. Supporting track length
+  spanned 3–128 source frames (median 15); only 1 best-evidence mask touched the
+  frame boundary.
 
-The outbound first pass completed all 29 chunks (1,829 inferences including
-overlap) in 362.3 s of SAM time. It produced 255 positive sampled timestamps and
-12 merged refinement windows totalling 102.5 s. Preparation took 147.2 s and model
-loading 12.2 s. These are candidates, not confirmed potholes.
+### Visual inspection of outbound candidates
 
-The process then stalled during native-frame export for the first refinement
-window, after writing 154 images. GPU utilization was zero and process threads
-were waiting. The stall occurred after introducing concurrent PNG writes; the
-exact cause was not established. The job was stopped, preserving completed
-chunks, and concurrent export was reverted to the previously successful serial
-path. The claim that parallel writing improves overall runtime remains unproven.
+All 85 outbound overlay images were inspected via local contact sheets (excluded
+from Git because frames contain burned-in camera GPS coordinates):
 
-Added explicit `--resume` support. Saved settings, source metadata/signature and
-selected timestamps must agree; completed chunks reconstruct tracks from the
-per-frame mask ledger. Partial chunks rerun. Full-precision boxes and scores are
-now retained in new ledgers. Attempt history distinguishes reused inference from
-the latest attempt's wall time. A regression test simulates interrupted output
-and verifies identical resumed observations without repeating completed inference.
-All 28 tests and Ruff pass. The recovery run has an on-demand Python stack-dump
-hook for diagnosing any further stall.
+- **Previously missed reported scenes:** Candidate `#0` (`158.46–160.43 s`, best
+  frame at `160.06 s`, score `0.422`, 48,833 px across 60 frames) tracks the
+  road-edge defect past the `158 s` first-reported-location still that returned
+  no detection in single-image testing, selecting a closer and sharper view as
+  the camera approaches. Around the `~295 s` second-reported outbound scene
+  (which also returned no single-image SAM mask), candidates `#44`–`#54` segment
+  multiple distressed and patched areas (`#45` score `0.672` over 103 frames;
+  `#53` score `0.668` over 127 frames). Because internal detection thresholds,
+  native PNG handling and multi-frame context all changed together, this does
+  not isolate frame-rate coverage as the sole cause.
+- **Why 85 candidate tracks are NOT 85 potholes:** Alongside localized surface
+  depressions and broken road-edge troughs (such as `#77` at `334.87 s`, score
+  `0.750`, and `#18` at `215.92 s`, score `0.652`), the 85 unreviewed tracks
+  include:
+  1. Large sealed tarmac and utility-trench repair patches (e.g., `#3`, `#14`,
+     `#28`, `#31` at 533,887 px, `#84`).
+  2. Surface mud, leaf litter and horse-manure clusters on the lane (e.g.,
+     `#23`–`#24`, `#34`–`#36`).
+  3. Fragmented tracks over heavily patched intervals (e.g., `168–170 s` and
+     `332–336 s`) where SAM intermittently drops an object or crosses chunks
+     without a shared-timestamp `IoU >= 0.5` match; `TrackRegistry` deliberately
+     keeps these separate rather than inferring physical identity from GPS.
+
+### Return corridor (`GRMS0012.MP4`, 420–600.6 s) — in progress
+
+The return scan started automatically at commit `e1d49cb` immediately after
+outbound completed. Its coarse plan selected 1,318 of 5,412 native frames across
+1,314.0 m of integrated known speed, including 4 end-of-clip frames selected via
+the 0.2 s `missing_speed_fallback` where the final 18 native frames extend past
+the last embedded Garmin GPS fix. Final return timings and candidate inspection
+follow upon completion.

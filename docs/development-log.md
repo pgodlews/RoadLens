@@ -86,8 +86,20 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
   processing because refinement covered almost the entire diagnostic section.
   Both yielded seven unreviewed tracks; visual inspection includes repaired/patchy
   regions, so this is not seven confirmed potholes or a precision/recall result.
-- Parallelized lossless PNG writing after observing significant preprocessing cost.
-  Added failure manifests and coverage checks; 28 tests and Ruff pass.
-- Detailed methods, settings, limitations and subsequent road-wide results are
-  maintained in `docs/adaptive-sampling.md`; aggregate diagnostic timings are in
-  `docs/evaluation/adaptive-sampling-results.json`.
+- Parallelized lossless PNG writing (`a7baa61`) after observing significant
+  preprocessing cost, but the outbound road-wide scan subsequently stalled while
+  exporting native PNGs for the first refinement window (exact cause unproven).
+  Reverted PNG export to the reliable serial implementation, added verified
+  `--resume` replay from completed chunk/frame ledgers (`e1d49cb`), and resumed
+  without repeating the 29 completed coarse GPU chunks.
+- Completed the full outbound Eccup Moor Road corridor scan (`GRMS0010.MP4`,
+  150–360 s, ~1,380 m): 5,753 frame inferences across 29 coarse and 66
+  native-rate refinement chunks in 1,164.7 s of SAM time, yielding 85 unreviewed
+  candidate tracks. Visual inspection confirmed useful detections around both
+  previously missed outbound reported-pothole scenes (`~160 s` and `~290–299 s`),
+  alongside false-positive tarmac repair patches, organic surface debris, and
+  unmerged track splits.
+- Detailed methods, settings, limitations and road-wide results are maintained in
+  `docs/adaptive-sampling.md`; aggregate sanitized metrics are in
+  `docs/evaluation/adaptive-sampling-results.json` and
+  `docs/evaluation/eccup-corridor-survey.json`.

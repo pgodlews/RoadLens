@@ -1,0 +1,97 @@
+{
+  "hardware": "NVIDIA RTX 3090, 24 GB",
+  "code_revision": "e1d49cba774139db585f4c052c70ca26a72fcd70",
+  "method": "Independent road-wide distance-sampled coarse scan (~1 m target spacing, bounded +/-0.05 s and +/-0.2 m road-sharpness selection) followed by native-frame refinement within +/-2.0 s of coarse detections. Serial lossless PNG export, 64-frame SAM 3.1 multiplex sessions, 16-frame overlap, 4-frame grounding batch. No pothole map pins used for selection. Candidates are unreviewed model tracks, not confirmed potholes; no precision/recall benchmark is claimed.",
+  "runs": [
+    {
+      "run": "outbound",
+      "status": "complete",
+      "source_video": "GRMS0010.MP4",
+      "start_seconds": 150.0,
+      "duration_seconds": 210.0,
+      "sampling": "distance",
+      "spacing_m": 1.0,
+      "native_resolution": [
+        2688,
+        2160
+      ],
+      "chunk_frames": 64,
+      "overlap_frames": 16,
+      "grounding_batch_size": 4,
+      "refine_padding_seconds": 2.0,
+      "thresholds": {
+        "output": 0.25,
+        "detection": 0.25,
+        "new_object": 0.35,
+        "image_only": 0.25
+      },
+      "coverage": {
+        "native_frames": 6294,
+        "selected_frames": 1381,
+        "max_selected_time_gap_seconds": 0.36703333333332466,
+        "integrated_known_distance_m": 1380.1304168588135,
+        "max_known_distance_gap_m": 1.4767072320001944,
+        "selected_frames_without_speed": 0,
+        "native_frames_without_speed": 0,
+        "native_intervals_over_spacing": 0,
+        "selection_reasons": {
+          "start": 1,
+          "distance": 1380
+        },
+        "speed_mps": {
+          "min": 3.12928,
+          "median": 7.59968,
+          "max": 8.9408
+        },
+        "note": "Integrated speed, not surveyed distance; excludes unknown speed."
+      },
+      "coarse_pass": {
+        "chunks": 29,
+        "inferred_frames_including_overlap": 1829,
+        "inference_seconds": 362.3254903316265,
+        "wall_seconds": 388.5588180059567,
+        "positive_unique_timestamps": 255
+      },
+      "refinement_pass": {
+        "windows": 12,
+        "merged_duration_seconds": 102.4550000000001,
+        "unique_native_frames": 3060,
+        "chunks": 66,
+        "inferred_frames_including_overlap": 3924,
+        "inference_seconds": 802.3745793167036,
+        "wall_seconds": 944.784873498138,
+        "positive_unique_timestamps": 1391
+      },
+      "timings": {
+        "initial_attempt_preparation_seconds": 147.24939237500075,
+        "resumed_attempt_preparation_seconds": 68.35941930790432,
+        "model_load_seconds": 12.922753105987795,
+        "total_inference_seconds": 1164.70006964833,
+        "resumed_attempt_wall_seconds": 1696.153784648981,
+        "inferred_frames_including_overlap": 5753,
+        "note": "Resumed after earlier concurrent-PNG-export stall; all 29 coarse chunks were replayed from ledger without repeating GPU inference, and all 66 refinement chunks completed with serial PNG export."
+      },
+      "candidates": {
+        "unreviewed_tracks": 85,
+        "gps_linked_tracks": 85,
+        "best_evidence_from_coarse": 13,
+        "best_evidence_from_refinement": 72,
+        "touches_frame_boundary": 1,
+        "score_min": 0.35025379061698914,
+        "score_median": 0.4046511650085449,
+        "score_max": 0.7500000596046448,
+        "tracks_with_best_score_ge_0_35": 85,
+        "tracks_with_best_score_ge_0_50": 15,
+        "tracks_with_best_score_ge_0_65": 4,
+        "tracks_with_best_score_ge_0_75": 1,
+        "mask_pixels_min": 446,
+        "mask_pixels_median": 12077,
+        "mask_pixels_max": 533887,
+        "supporting_frames_min": 3,
+        "supporting_frames_median": 15,
+        "supporting_frames_max": 128,
+        "visual_inspection_summary": "Includes useful localized depressions and road-edge defects (including at ~160.1 s past the missed 158 s still and around the ~295 s outbound area), alongside sealed asphalt/utility repair patches, surface mud/organic debris, and split tracks across non-overlapping chunks. Human review is required."
+      }
+    }
+  ]
+}
