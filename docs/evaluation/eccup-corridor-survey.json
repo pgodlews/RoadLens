@@ -1,11 +1,16 @@
 {
   "hardware": "NVIDIA RTX 3090, 24 GB",
-  "code_revision": "e1d49cba774139db585f4c052c70ca26a72fcd70",
+  "code_revisions": {
+    "outbound": "e1d49cba774139db585f4c052c70ca26a72fcd70",
+    "return": "ef900c760a756bbd37af94c04585a975f4635947"
+  },
   "method": "Independent road-wide distance-sampled coarse scan (~1 m target spacing, bounded +/-0.05 s and +/-0.2 m road-sharpness selection) followed by native-frame refinement within +/-2.0 s of coarse detections. Serial lossless PNG export, 64-frame SAM 3.1 multiplex sessions, 16-frame overlap, 4-frame grounding batch. No pothole map pins used for selection. Candidates are unreviewed model tracks, not confirmed potholes; no precision/recall benchmark is claimed.",
   "runs": [
     {
       "run": "outbound",
       "status": "complete",
+      "code_revision": "e1d49cba774139db585f4c052c70ca26a72fcd70",
+      "tracked_code_modified": false,
       "source_video": "GRMS0010.MP4",
       "start_seconds": 150.0,
       "duration_seconds": 210.0,
@@ -69,6 +74,7 @@
         "total_inference_seconds": 1164.70006964833,
         "resumed_attempt_wall_seconds": 1696.153784648981,
         "inferred_frames_including_overlap": 5753,
+        "single_pass_all_native_inferences_for_comparison": 8374,
         "note": "Resumed after earlier concurrent-PNG-export stall; all 29 coarse chunks were replayed from ledger without repeating GPU inference, and all 66 refinement chunks completed with serial PNG export."
       },
       "candidates": {
@@ -92,6 +98,308 @@
         "supporting_frames_max": 128,
         "visual_inspection_summary": "Includes useful localized depressions and road-edge defects (including at ~160.1 s past the missed 158 s still and around the ~295 s outbound area), alongside sealed asphalt/utility repair patches, surface mud/organic debris, and split tracks across non-overlapping chunks. Human review is required."
       }
+    },
+    {
+      "run": "return",
+      "status": "complete",
+      "code_revision": "ef900c760a756bbd37af94c04585a975f4635947",
+      "tracked_code_modified": false,
+      "source_video": "GRMS0012.MP4",
+      "start_seconds": 420.0,
+      "duration_seconds": 180.607,
+      "sampling": "distance",
+      "spacing_m": 1.0,
+      "native_resolution": [
+        2688,
+        2160
+      ],
+      "chunk_frames": 64,
+      "overlap_frames": 16,
+      "grounding_batch_size": 4,
+      "refine_padding_seconds": 2.0,
+      "thresholds": {
+        "output": 0.25,
+        "detection": 0.25,
+        "new_object": 0.35,
+        "image_only": 0.25
+      },
+      "coverage": {
+        "native_frames": 5412,
+        "selected_frames": 1318,
+        "max_selected_time_gap_seconds": 0.266944444444448,
+        "integrated_known_distance_m": 1313.951719041697,
+        "max_known_distance_gap_m": 1.4320181333328037,
+        "selected_frames_without_speed": 4,
+        "native_frames_without_speed": 18,
+        "native_intervals_over_spacing": 0,
+        "selection_reasons": {
+          "start": 1,
+          "distance": 1313,
+          "missing_speed_fallback": 3,
+          "end": 1
+        },
+        "speed_mps": {
+          "min": 5.36448,
+          "median": 7.59968,
+          "max": 8.9408
+        },
+        "note": "Integrated speed, not surveyed distance; final 18 native frames extend past the last embedded Garmin GPS fix, exercising the 0.2 s missing_speed_fallback."
+      },
+      "coarse_pass": {
+        "chunks": 28,
+        "inferred_frames_including_overlap": 1750,
+        "inference_seconds": 349.8404325483134,
+        "wall_seconds": 382.74711607501376,
+        "positive_unique_timestamps": 335
+      },
+      "refinement_pass": {
+        "windows": 10,
+        "merged_duration_seconds": 104.00003344444423,
+        "unique_native_frames": 3108,
+        "chunks": 66,
+        "inferred_frames_including_overlap": 4004,
+        "inference_seconds": 855.1009656670503,
+        "wall_seconds": 1006.3047656073468,
+        "positive_unique_timestamps": 1418
+      },
+      "timings": {
+        "initial_attempt_preparation_seconds": 314.35717411292717,
+        "resumed_attempt_preparation_seconds": 58.75944758893456,
+        "model_load_seconds": 13.455865377909504,
+        "total_inference_seconds": 1204.9413982153637,
+        "resumed_attempt_wall_seconds": 1165.3078545099124,
+        "inferred_frames_including_overlap": 5754,
+        "single_pass_all_native_inferences_for_comparison": 7204,
+        "note": "Resumed at ef900c7 after fixing an upstream SAM 3.1 dynamic-multiplex clear_all_points_in_frame conditioning-reset crash encountered at fine-003 chunk 0; all 52 prior completed chunks (28 coarse + 24 fine) were replayed from ledger without repeating GPU inference."
+      },
+      "candidates": {
+        "unreviewed_tracks": 86,
+        "gps_linked_tracks": 86,
+        "best_evidence_from_coarse": 8,
+        "best_evidence_from_refinement": 78,
+        "touches_frame_boundary": 1,
+        "score_min": 0.35025379061698914,
+        "score_median": 0.4073946923017502,
+        "score_max": 0.8083832263946533,
+        "tracks_with_best_score_ge_0_35": 86,
+        "tracks_with_best_score_ge_0_50": 17,
+        "tracks_with_best_score_ge_0_65": 8,
+        "tracks_with_best_score_ge_0_75": 5,
+        "mask_pixels_min": 158,
+        "mask_pixels_median": 10116.0,
+        "mask_pixels_max": 406474,
+        "supporting_frames_min": 3,
+        "supporting_frames_median": 12.5,
+        "supporting_frames_max": 198,
+        "visual_inspection_summary": "Includes sharp cavities and deteriorated patch edges (notably #74 at 586.59 s near the previously missed first reported location, #28-#33 across 480.3-483.9 s at the second reported location, #37-#38 at 489.4 s, and #65 at 556.9 s), alongside sealed asphalt/trench patches (some scoring up to 0.808), horse manure/mud clusters, and split tracks across complex patched intervals."
+      }
+    }
+  ],
+  "spacing_sensitivity": [
+    {
+      "corridor": "outbound",
+      "source_video": "GRMS0010.MP4",
+      "native_frames": 6294,
+      "integrated_known_distance_m": 1380.13,
+      "plans": [
+        {
+          "mode": "0.5m",
+          "spacing_m": 0.5,
+          "selected_frames": 2761,
+          "fraction_of_native": 0.4387,
+          "coarse_chunks_64_16": 58,
+          "coarse_inferences_with_overlap": 3673,
+          "max_selected_time_gap_seconds": 0.1668,
+          "max_known_distance_gap_m": 0.7448,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 0,
+          "selection_reasons": {
+            "start": 1,
+            "distance": 2760
+          },
+          "mean_road_laplacian_var": 226.82,
+          "mean_road_laplacian_var_no_window": 226.82
+        },
+        {
+          "mode": "1.0m",
+          "spacing_m": 1.0,
+          "selected_frames": 1381,
+          "fraction_of_native": 0.2194,
+          "coarse_chunks_64_16": 29,
+          "coarse_inferences_with_overlap": 1829,
+          "max_selected_time_gap_seconds": 0.367,
+          "max_known_distance_gap_m": 1.4767,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 0,
+          "selection_reasons": {
+            "start": 1,
+            "distance": 1380
+          },
+          "mean_road_laplacian_var": 228.69,
+          "mean_road_laplacian_var_no_window": 226.88
+        },
+        {
+          "mode": "2.0m",
+          "spacing_m": 2.0,
+          "selected_frames": 701,
+          "fraction_of_native": 0.1114,
+          "coarse_chunks_64_16": 15,
+          "coarse_inferences_with_overlap": 925,
+          "max_selected_time_gap_seconds": 0.5339,
+          "max_known_distance_gap_m": 2.8341,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 0,
+          "selection_reasons": {
+            "start": 1,
+            "distance": 690,
+            "time_limit": 9,
+            "end": 1
+          },
+          "mean_road_laplacian_var": 235.13,
+          "mean_road_laplacian_var_no_window": 226.61
+        },
+        {
+          "mode": "5.0m",
+          "spacing_m": 5.0,
+          "selected_frames": 590,
+          "fraction_of_native": 0.0937,
+          "coarse_chunks_64_16": 12,
+          "coarse_inferences_with_overlap": 766,
+          "max_selected_time_gap_seconds": 0.5339,
+          "max_known_distance_gap_m": 4.7732,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 0,
+          "selection_reasons": {
+            "start": 1,
+            "time_limit": 312,
+            "distance": 276,
+            "end": 1
+          },
+          "mean_road_laplacian_var": 232.07,
+          "mean_road_laplacian_var_no_window": 223.66
+        },
+        {
+          "mode": "all_native",
+          "spacing_m": null,
+          "selected_frames": 6294,
+          "fraction_of_native": 1.0,
+          "coarse_chunks_64_16": 131,
+          "coarse_inferences_with_overlap": 8374,
+          "max_selected_time_gap_seconds": 0.0334,
+          "max_known_distance_gap_m": 0.2984,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 0,
+          "selection_reasons": {
+            "native": 6294
+          },
+          "mean_road_laplacian_var": 222.44,
+          "mean_road_laplacian_var_no_window": 222.44
+        }
+      ]
+    },
+    {
+      "corridor": "return",
+      "source_video": "GRMS0012.MP4",
+      "native_frames": 5412,
+      "integrated_known_distance_m": 1313.95,
+      "plans": [
+        {
+          "mode": "0.5m",
+          "spacing_m": 0.5,
+          "selected_frames": 2631,
+          "fraction_of_native": 0.4861,
+          "coarse_chunks_64_16": 55,
+          "coarse_inferences_with_overlap": 3495,
+          "max_selected_time_gap_seconds": 0.2336,
+          "max_known_distance_gap_m": 0.7345,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 3,
+          "selection_reasons": {
+            "start": 1,
+            "distance": 2627,
+            "missing_speed_fallback": 3
+          },
+          "mean_road_laplacian_var": 226.87,
+          "mean_road_laplacian_var_no_window": 226.85
+        },
+        {
+          "mode": "1.0m",
+          "spacing_m": 1.0,
+          "selected_frames": 1318,
+          "fraction_of_native": 0.2435,
+          "coarse_chunks_64_16": 28,
+          "coarse_inferences_with_overlap": 1750,
+          "max_selected_time_gap_seconds": 0.2669,
+          "max_known_distance_gap_m": 1.432,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 4,
+          "selection_reasons": {
+            "start": 1,
+            "distance": 1313,
+            "missing_speed_fallback": 3,
+            "end": 1
+          },
+          "mean_road_laplacian_var": 227.39,
+          "mean_road_laplacian_var_no_window": 226.92
+        },
+        {
+          "mode": "2.0m",
+          "spacing_m": 2.0,
+          "selected_frames": 661,
+          "fraction_of_native": 0.1221,
+          "coarse_chunks_64_16": 14,
+          "coarse_inferences_with_overlap": 869,
+          "max_selected_time_gap_seconds": 0.4338,
+          "max_known_distance_gap_m": 2.685,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 4,
+          "selection_reasons": {
+            "start": 1,
+            "distance": 656,
+            "missing_speed_fallback": 3,
+            "end": 1
+          },
+          "mean_road_laplacian_var": 238.43,
+          "mean_road_laplacian_var_no_window": 227.1
+        },
+        {
+          "mode": "5.0m",
+          "spacing_m": 5.0,
+          "selected_frames": 525,
+          "fraction_of_native": 0.097,
+          "coarse_chunks_64_16": 11,
+          "coarse_inferences_with_overlap": 685,
+          "max_selected_time_gap_seconds": 0.5339,
+          "max_known_distance_gap_m": 4.7733,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 3,
+          "selection_reasons": {
+            "start": 1,
+            "time_limit": 259,
+            "distance": 262,
+            "missing_speed_fallback": 3
+          },
+          "mean_road_laplacian_var": 239.36,
+          "mean_road_laplacian_var_no_window": 227.92
+        },
+        {
+          "mode": "all_native",
+          "spacing_m": null,
+          "selected_frames": 5412,
+          "fraction_of_native": 1.0,
+          "coarse_chunks_64_16": 113,
+          "coarse_inferences_with_overlap": 7204,
+          "max_selected_time_gap_seconds": 0.0334,
+          "max_known_distance_gap_m": 0.2985,
+          "native_intervals_over_spacing": 0,
+          "selected_frames_without_speed": 18,
+          "selection_reasons": {
+            "native": 5412
+          },
+          "mean_road_laplacian_var": 230.91,
+          "mean_road_laplacian_var_no_window": 230.91
+        }
+      ]
     }
   ]
 }

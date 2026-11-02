@@ -99,7 +99,25 @@ The remote backend uses `sam-3.1` and Meta's official streaming parser. Its resu
   previously missed outbound reported-pothole scenes (`~160 s` and `~290–299 s`),
   alongside false-positive tarmac repair patches, organic surface debris, and
   unmerged track splits.
-- Detailed methods, settings, limitations and road-wide results are maintained in
-  `docs/adaptive-sampling.md`; aggregate sanitized metrics are in
-  `docs/evaluation/adaptive-sampling-results.json` and
+- Diagnosed and fixed an upstream Meta SAM 3.1 dynamic-multiplex tracking crash
+  (`RuntimeError: No points are provided; please add points first`) encountered
+  during `fine-003` of the return corridor scan (`ef900c7`): when dynamic
+  multiplex reuses a bucket on an already-tracked frame and later removes all
+  earlier objects conditioned on `cond_frame_outputs`, `clear_all_points_in_frame`
+  previously wiped the live object's tracking state. Added a surgical adapter in
+  `src/roadlens/backends/local.py` with unit tests and reused existing `fine-*`
+  PNG exports on `--resume`.
+- Completed the full return Eccup Moor Road corridor scan (`GRMS0012.MP4`,
+  420–600.6 s, ~1,314 m, including real end-of-clip `missing_speed_fallback`
+  coverage): 5,754 frame inferences across 28 coarse and 66 native-rate
+  refinement chunks in 1,204.9 s of SAM time, yielding 86 unreviewed candidate
+  tracks. Visual inspection confirmed sharp cavity/edge detections at both
+  reported return locations (`#74` at `586.59 s` score `0.770` and `#28`–`#33`
+  across `480.3–483.9 s`), while demonstrating that sealed asphalt patches can
+  score up to `0.808`—confirming that confidence filtering alone cannot replace
+  multimodal triage and human review.
+- Evaluated coarse-spacing sensitivity (`0.5 m`–`5.0 m` vs `all_native`) across
+  both corridors. Detailed methods, settings, limitations and road-wide results
+  are maintained in `docs/adaptive-sampling.md`; aggregate sanitized metrics are
+  in `docs/evaluation/adaptive-sampling-results.json` and
   `docs/evaluation/eccup-corridor-survey.json`.

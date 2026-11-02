@@ -144,13 +144,18 @@ around SAM's 15-frame hot-start period. Coverage checks now reject incomplete or
 duplicate backend frame output, manifests record the code revision and failure
 status, and 28 tests pass.
 
-## Road-wide scan observations (outbound complete, return running)
+## Road-wide bidirectional corridor survey (completed)
 
 The outbound survey covers 150–360 s of `GRMS0010.MP4`; the return covers
 420 s to the end (600.6 s) of `GRMS0012.MP4`. Both intervals include margins
 around the previously identified road corridor. Neither scan accepts or uses
 pothole pins for frame selection. Aggregate sanitized metrics are recorded in
 `docs/evaluation/eccup-corridor-survey.json`.
+
+| Corridor | Native frames | Coarse (~1 m) | Refined windows | Total inferences | Total SAM time | Unreviewed tracks |
+|---|---:|---:|---:|---:|---:|---:|
+| Outbound (`GRMS0010.MP4`, 150–360 s) | 6,294 | 1,381 (1,380.1 m) | 12 (102.5 s, 48.8%) | 5,753 | 1,164.7 s | 85 |
+| Return (`GRMS0012.MP4`, 420–600.6 s) | 5,412 | 1,318 (1,314.0 m) | 10 (104.0 s, 57.6%) | 5,754 | 1,204.9 s | 86 |
 
 ### Outbound corridor (`GRMS0010.MP4`, 150–360 s) — completed
 
@@ -210,11 +215,101 @@ from Git because frames contain burned-in camera GPS coordinates):
      without a shared-timestamp `IoU >= 0.5` match; `TrackRegistry` deliberately
      keeps these separate rather than inferring physical identity from GPS.
 
-### Return corridor (`GRMS0012.MP4`, 420–600.6 s) — in progress
+### Return corridor (`GRMS0012.MP4`, 420–600.6 s) — completed
 
-The return scan started automatically at commit `e1d49cb` immediately after
-outbound completed. Its coarse plan selected 1,318 of 5,412 native frames across
-1,314.0 m of integrated known speed, including 4 end-of-clip frames selected via
-the 0.2 s `missing_speed_fallback` where the final 18 native frames extend past
-the last embedded Garmin GPS fix. Final return timings and candidate inspection
-follow upon completion.
+- **Coverage & missing-speed fallback:** Selected 1,318 coarse frames out of
+  5,412 native frames across 1,314.0 m of integrated known speed (speed range
+  5.36–8.94 m/s, median 7.60 m/s; max selected spatial gap 1.43 m). The final
+  18 native frames extend past the last embedded Garmin GPS fix at clip end,
+  exercising the 0.2 s `missing_speed_fallback` on real footage (selecting 3
+  fallback frames plus the terminal frame, all logged explicitly).
+- **Upstream SAM 3.1 dynamic-multiplex crash & adapter fix (`ef900c7`):** After
+  completing all 28 coarse chunks (1,750 inferences, 349.8 s SAM time, 335
+  positive coarse timestamps) and 24 refinement chunks (`fine-000`–`fine-002`),
+  the initial attempt failed at `fine-003` chunk `0` frame `23/64` with
+  `RuntimeError: No points are provided; please add points first` inside
+  `sam3/model/video_tracking_multiplex_demo.py`. Investigation traced this to
+  dynamic multiplex (`is_multiplex_dynamic=True`) adding a new object into a
+  reused bucket on an already-tracked frame (`non_cond_frame_outputs`), followed
+  by `_tracker_remove_objects` clearing the last older object on
+  `cond_frame_outputs` and calling `_reset_tracking_results` while the newer
+  object remained live. `_wrap_clear_all_points_in_frame` in
+  `src/roadlens/backends/local.py` promotes the earliest remaining input frame
+  into `cond_frame_outputs` only when the last conditioned frame is cleared with
+  live objects remaining, preserving normal conditioning memory elsewhere.
+  Resuming with `--resume` replayed all 52 completed chunks from `frames.jsonl`
+  and reused already-exported `fine-*` PNGs without repeating GPU work.
+- **Runtime:** Coarse SAM inference took 349.8 s; refinement SAM inference across
+  all 10 merged windows (`fine-000`–`fine-009`, 104.0 s / 57.6% of the corridor,
+  3,108 unique native frames, 66 chunks, 4,004 inferences) took 855.1 s; total
+  SAM inference was **1,204.9 s** (20.1 min) across **5,754** frame inferences
+  (resumed-attempt wall time 1,165.3 s).
+- **Unreviewed candidate tracks:** **86 unreviewed tracks**, all linked to
+  `garmin_camera_gps` (within the 2.0 s telemetry tolerance). Native-rate
+  refinement supplied the best-evidence frame for 78 of 86 tracks (8 retained a
+  coarse frame). Best scores spanned 0.350–0.808 (median 0.407): 17 tracks
+  scored `>= 0.50`, 8 scored `>= 0.65`, and 5 scored `>= 0.75`. Supporting
+  lengths spanned 3–198 source frames (median 12.5); 1 mask touched the frame
+  boundary.
+
+### Visual inspection of return candidates
+
+All 86 return overlay images were inspected via local contact sheets:
+
+- **Previously missed and reported return scenes:** Near the first reported
+  location on the return pass (`~586 s`, missed by earlier single-image testing),
+  candidate `#74` (`585.33–588.36 s`, best frame at `586.59 s`, score `0.770`,
+  30,730 px across 92 frames) cleanly segments an elongated asphalt cavity in
+  the left wheel track. Across the `480–486 s` second-reported return area,
+  candidates `#28`–`#33` (`480.25–483.99 s`, up to score `0.675`) plus `#26`
+  (`475.55 s`, score `0.797`, 198 frames) and `#37`–`#38` (`489.39 s`, scores
+  `0.797` and `0.664` in the rescued `fine-003` window) cover broken sunken
+  patch edges and road-edge deterioration, as does `#65` (`556.90 s`, score
+  `0.766`, 42,557 px across 78 frames).
+- **Threshold limitation on false positives:** Just like outbound, the 86 return
+  candidates include large sealed resurfacing/utility strips (`#1`, `#16`,
+  `#20`, `#54` at 406,474 px, `#55` at 309,184 px, `#59`, `#80`, `#85`),
+  horse-manure and mud clusters down the lane centre (`#47`–`#52`, `#61`–`#63`,
+  `#71`–`#73`), and split tracks across complex patched intervals. Crucially,
+  several sealed dark asphalt patches achieved very high SAM confidence (`#26`
+  at `0.797`, `#85` at `0.808`), demonstrating that **raising SAM's confidence
+  threshold alone cannot separate sealed repairs from true potholes** without
+  discarding genuine lower-scoring defects (such as outbound `#0` at `0.422`).
+
+## Spacing, sharpness, and two-pass refinement trade-offs
+
+Evaluating `select_frames` across `0.5 m`, `1.0 m`, `2.0 m`, `5.0 m` and
+`all_native` on both corridors (`docs/evaluation/eccup-corridor-survey.json`)
+clarifies three practical trade-offs:
+
+| Mode | Outbound frames (coarse inferences) | Outbound max gap | Return frames (coarse inferences) | Return max gap |
+|---|---:|---:|---:|---:|
+| `0.5 m` | 2,761 (3,673) | 0.74 m | 2,631 (3,495) | 0.73 m |
+| `1.0 m` | 1,381 (1,829) | 1.48 m | 1,318 (1,750) | 1.43 m |
+| `2.0 m` | 701 (925) | 2.83 m | 661 (869) | 2.69 m |
+| `5.0 m` (`max_interval=0.5 s`) | 590 (766) | 4.77 m | 525 (685) | 4.77 m |
+| `all_native` (single pass) | 6,294 (8,374) | 0.30 m | 5,412 (7,204) | 0.30 m |
+
+1. **Speed adaptation and `max_interval` coupling:** Distance targets adapt
+   automatically to vehicle speed without separate cycling/driving modes, up to
+   source frame-rate limits. However, when `speed * max_interval < spacing_m`
+   (at median cycling speed `7.6 m/s`, `0.5 s` is `3.8 m`), the `0.5 s`
+   low-speed guard fires before `5.0 m` (`312 time_limit` vs `276 distance` on
+   outbound), preventing `5.0 m` coarse sampling from halving frame counts
+   unless `--max-interval` is also raised.
+2. **Bounded sharpness window scale:** Restricting sharpness selection to both
+   `±0.05 s` and `±0.2 * spacing_m` prevents skipping road sections. At `0.5 m`
+   (`±0.10 m`), adjacent 30 fps frames at cycling speed (~`0.25 m` apart) rarely
+   fall inside the spatial bound; at `1.0–2.0 m`, local selection modestly
+   improves mean road-region Laplacian variance (`226.6 -> 235.1` outbound,
+   `227.1 -> 238.4` return at `2.0 m`).
+3. **When two-pass refinement helps vs hurts:** Single-pass `all_native` with
+   64-frame chunks and 16-frame overlap requires 8,374 inferences on outbound
+   and 7,204 on return. Two-pass `1.0 m + refinement` inferred 5,753 frames on
+   outbound (`-31.3%`) and 5,754 on return (`-20.1%`), whereas on the densely
+   patched 6 s diagnostic clip (92% refined) two-pass inferred `+12.7%` more
+   frames than single-pass native. Even with ~20–31% savings, scanning ~2.7 km
+   of 4K footage took **39.5 minutes of GPU SAM inference** and produced **171
+   unreviewed candidate tracks**, motivating user-scoped map/time segment
+   selection, multimodal VLM patch triage, and bookended human review rather
+   than unconditional full-ride scanning.
