@@ -267,3 +267,26 @@ def test_triage_max_candidates_zero_and_negative(tmp_path):
     assert backend.triaged == [0] and len(backend.drafted) == 1
     with pytest.raises(ValueError, match="nonnegative"):
         triage_run_directory(tmp_path, backend, max_candidates=-1)
+
+
+def test_draft_prompt_separates_human_review_from_model_triage():
+    captured: list[dict] = []
+
+    def fake_transport(base_url, api_key, payload):
+        captured.append(payload)
+        return {"choices": [{"message": {"content": "# DRAFT\nNothing confirmed."}}]}
+
+    backend = LocalGlimmerBackend(
+        server_url="http://127.0.0.1:9931/v1", transport=fake_transport
+    )
+    backend.draft_summary_report(
+        [
+            {"object_id": 0, "review_status": "unreviewed",
+             "vlm_triage": {"classification": "hazard_candidate"}},
+            {"object_id": 1, "review_status": "confirmed"},
+        ]
+    )
+    prompt = captured[0]["messages"][0]["content"]
+    assert "human-confirmed / hazard_candidate" not in prompt
+    assert "only a model opinion" in prompt
+    assert '"confirmed": 1' in prompt and '"unreviewed": 1' in prompt

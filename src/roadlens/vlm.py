@@ -481,11 +481,16 @@ class BaseVlmBackend:
                     "vlm_triage": obs.get("vlm_triage"),
                 }
             )
+        status_counts = {
+            status: sum(item["review_status"] == status for item in sanitized_items)
+            for status in ("confirmed", "unreviewed", "rejected")
+        }
         context = {
             "street_name": street_name,
             "place_name": place_name,
             "query_summary": query_summary,
             "candidate_count": len(sanitized_items),
+            "human_review_counts": status_counts,
             "items": sanitized_items,
         }
         prompt = (
@@ -498,8 +503,13 @@ class BaseVlmBackend:
             "2. State clearly that any coordinates are Garmin camera GPS positions at "
             "the moment of capture, not surveyed defect coordinates.\n"
             "3. Never invent physical depth, width, or legal severity ratings.\n"
-            "4. Group or highlight human-confirmed / hazard_candidate items separately "
-            "from rejected or sealed_repair items.\n\n"
+            "4. `review_status` is the HUMAN decision; `vlm_triage.classification` is "
+            "only a model opinion. Call an item 'confirmed' or 'human-confirmed' only "
+            "if its review_status is 'confirmed'. Never merge the two in one heading.\n"
+            "5. Group items by review_status first (confirmed, then unreviewed; omit "
+            "rejected items except in a count). Within unreviewed items, label the "
+            "VLM classification as 'model triage' and list hazard_candidate before "
+            "sealed_repair, surface_debris_or_stain, and uncertain.\n\n"
             f"Structured input:\n{json.dumps(context, indent=2)}"
         )
         body = self.chat_completion(
