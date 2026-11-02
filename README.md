@@ -1,19 +1,64 @@
 # RoadLens
 
-RoadLens turns Garmin cycling-camera footage into human-reviewed road-hazard evidence and summary reports. It is a **post-ride analysis workflow**, not a live warning system or an automated council spammer.
+![RoadLens: Ride it. Review it. Report it.](docs/samples/roadlens-hero.jpg)
 
-RoadLens implements a **bookended human-in-the-loop** pattern:
-1. **Human scopes at the start:** drop or index a ride folder/clip on an offline OpenStreetMap basemap (`roadlens studio`)—or ask an assistant via MCP (`roadlens mcp`) by street name, elapsed ride offset (*"20 minutes into my ride"*), or wall-clock time (*"around 12:30"*)—and pick a hazard preset (`pothole`, `cracking`, `debris`, `flooding`, `fallen tree branch`) or custom prompt.
-2. **Meta SAM 3.1 + VLM assist in the middle:** distance-sampled (`~1 m`) + native-rate refined SAM 3.1 segments candidate hazards, and local **Muse Glimmer** (`llama.cpp`) or a remote OpenAI-compatible VLM triages candidates using non-occluding frame + 1:1 crop composites (`hazard_candidate`, `sealed_repair`, `surface_debris_or_stain`, `uncertain`) and drafts a grounded Markdown summary report.
-3. **Human confirms at the end:** every model detection stays `review_status: "unreviewed"` until a human inspects the visual overlay, confirms or rejects each candidate, optionally edits the summary report, and exports **only human-confirmed** GeoJSON. Coordinates are explicitly labelled as **Garmin camera GPS** (`camera_gps`), never surveyed defect coordinates, and nothing is submitted automatically to local authorities.
+RoadLens turns bike-camera footage into human-reviewed road-hazard evidence. Meta **SAM 3.1** segments candidate potholes and other hazards, **Muse Glimmer** triages each candidate, and you confirm or reject every one before anything is exported. The output is GeoJSON plus a draft report you can copy into a council or FixMyStreet submission yourself.
 
-## Status
+It is a **post-ride analysis workflow**: not a live warning system, and never an automated council spammer.
 
-Built for the Meta Global AI Developer Hackathon:
-- **Bidirectional SAM 3.1 corridor survey completed and audited** on real Eccup Moor Road Garmin footage (~2.7 km across outbound and return passes; see [docs/adaptive-sampling.md](docs/adaptive-sampling.md) and [docs/evaluation/eccup-corridor-survey.json](docs/evaluation/eccup-corridor-survey.json)).
-- **Offline PMTiles v3 MVT street-name resolution & multi-clip Garmin ride indexing** (`src/roadlens/pmtiles_roads.py`, `src/roadlens/ride.py`) verified offline against `united-kingdom.pmtiles` with zero external API calls.
-- **Dual VLM triage & summary reporting** (`src/roadlens/vlm.py`): `LocalGlimmerBackend` (`Muse-Glimmer-30B` via `llama-server`) empirically verified on an RTX 3090; `RemoteVlmBackend` and remote SAM API conversion are unit-tested with mocked HTTP responses (with default burned-in GPS-banner masking on remote VLM calls).
-- **Interactive web workflow (`roadlens studio`)** and **stdio MCP server (`roadlens mcp` + `skills/roadlens-investigator/SKILL.md`)** ready for human-guided and agent-assisted investigation.
+Built for the Meta Global AI Developer Hackathon, 1–4 November 2026.
+
+## Why
+
+Potholes are a real danger on rural lanes, and councils act on reports with clear evidence and a location. A cyclist with a bike camera already has that evidence somewhere in hours of footage, but nobody can scrub through it by hand. Fully automatic reporting is no answer either: on our footage SAM scored a harmless sealed patch at 0.808, higher than most real potholes. RoadLens uses models to cut the footage down to a short list of candidates, then leaves the decision to a person.
+
+## How it works
+
+```mermaid
+flowchart LR
+  A["Ride footage<br/>+ Garmin GPS"] --> B["1. Scope<br/>pick a stretch on an<br/>offline OSM map"]
+  B --> C["2. Segment<br/>SAM 3.1, a sharp frame<br/>every ~1 m, 30 fps refine"]
+  C --> D["3. Triage<br/>Muse Glimmer judges an<br/>unmasked close-up"]
+  D --> E["4. Review<br/>human confirms<br/>or rejects each one"]
+  E --> F["5. Export<br/>confirmed-only GeoJSON<br/>+ draft report"]
+```
+
+1. **Scope:** index a ride folder and pick a stretch by clicking two points on the map, by street name, by ride time ("20 minutes in") or by clock time ("around 12:30"). Street lookup runs offline from a local PMTiles archive. Choose a hazard preset (pothole, cracking, debris, flooding, fallen branch, sunken ironwork) or type your own.
+2. **Segment:** RoadLens integrates Garmin speed to pick one sharp frame about every metre, runs SAM 3.1 with a text prompt, then re-scans ±2 s around each hit at the native 30 fps. Every frame keeps its exact source timestamp and camera GPS fix.
+3. **Triage:** Muse Glimmer 30B (local, via llama.cpp) or a remote OpenAI-compatible VLM classifies each candidate as `hazard_candidate`, `sealed_repair`, `surface_debris_or_stain` or `uncertain`. It sees the raw frame plus an unmasked 1:1 crop, because a coloured SAM mask hid the asphalt texture and misled it.
+4. **Review:** in RoadLens Studio you step through candidates with the evidence, the model's verdict and the camera GPS, pressing **C** to confirm or **X** to reject. Model output never changes `review_status`; only you do.
+5. **Export:** only human-confirmed candidates go into the GeoJSON. Points are labelled as camera GPS positions, not surveyed defect locations. Nothing is submitted anywhere automatically.
+
+The same tools are exposed to AI agents through an MCP server (`roadlens mcp`) with an [investigator skill](skills/roadlens-investigator/SKILL.md), so an assistant can find "the potholes on Eccup Moor Road" for you, and still hands the confirm/reject step back to you.
+
+## See it
+
+| Scope a stretch and scan it | Review each candidate |
+|---|---|
+| ![Studio scope view with a selected stretch on the offline map](docs/samples/studio-scope.jpg) | ![Studio review pane with the SAM box, close-up, Glimmer verdict and Confirm button](docs/samples/studio-review.jpg) |
+
+## Results on real footage
+
+All results come from real Garmin Varia Vue footage of a rural lane near Eccup, Leeds, recorded on 11 October 2026.
+
+- **2.7 km corridor survey, both directions:** 2,699 sampled frames plus 11,706 native-rate frames, 171 unreviewed candidate tracks. Both pothole locations reported by the rider were recovered in both travel directions ([adaptive sampling write-up](docs/adaptive-sampling.md), [data](docs/evaluation/eccup-corridor-survey.json)).
+- **Distance sampling with targeted refinement** used 20–31% fewer SAM inferences than scanning every native frame.
+- **Confidence alone is not enough:** a sealed asphalt patch scored 0.808, which is why RoadLens adds VLM triage and a human decision instead of raising thresholds.
+- **VLM triage:** pairing the raw frame with an unmasked crop took Glimmer from mislabelling a real pothole as "blue paint" to separating pothole, sealed repair and stain correctly on all three test candidates ([development log](docs/development-log.md), [earlier Glimmer evaluation](docs/glimmer-evaluation.md)).
+- **End-to-end Studio run (2 November):** a 25-second return-pass window gave 9 candidates in 6 minutes on one RTX 3090, including the known pothole at 0.828.
+
+These are qualitative results on one road. No recall or precision figure is claimed, and pothole sizes are not measured.
+
+## What is verified
+
+| Component | Status |
+|---|---|
+| Local SAM 3.1 scan and refinement (RTX 3090) | Run on 2.7 km of real footage |
+| Local Muse Glimmer 30B triage and report drafting | Run on real candidates |
+| Offline street lookup and multi-clip ride indexing | Run against the full UK PMTiles archive, no network calls |
+| RoadLens Studio, scope to confirmed export | Run end to end on real footage |
+| MCP server and investigator skill | Unit-tested; live street and ride-time lookup smoke-tested |
+| Remote Meta Model API (SAM 3.1 and VLM) | Implemented and unit-tested with mocked responses; live run pending API credits |
 
 ## Requirements
 
@@ -121,4 +166,4 @@ RoadLens source code is available under the MIT License. Meta SAM 3.1 and its ch
 
 ## Development history
 
-Development started from an empty repository on 1 November 2026. Commit history records the implementation as it is built and validated during the hackathon. See the [development log](docs/development-log.md) for real-footage experiments, negative results, prior-work attribution, and hosted-API verification status, and [ideas to explore](docs/ideas-to-explore.md) for optional future enhancements (such as kinematic and homography-based pothole width/length estimation).
+Development started from an empty repository on 1 November 2026. Commit history records the implementation as it is built and validated during the hackathon. See the [development log](docs/development-log.md) for real-footage experiments, negative results, prior-work attribution, and hosted-API verification status, and [ideas to explore](docs/ideas-to-explore.md) for optional future enhancements (such as kinematic and homography-based pothole width/length estimation, and DJI and phone camera input).
