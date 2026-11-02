@@ -149,7 +149,17 @@ class TrackRegistry:
         return sorted(merged.values(), key=lambda t: min(t["times"]))
 
 
-def run_pass(backend, choices, paths, name, output, registry, chunk_size, overlap):
+def run_pass(
+    backend,
+    choices,
+    paths,
+    name,
+    output,
+    registry,
+    chunk_size,
+    overlap,
+    prompt: str = "pothole",
+):
     detections, timings = [], []
     completed = {}
     chunk_path = output / "chunks.jsonl"
@@ -229,7 +239,7 @@ def run_pass(backend, choices, paths, name, output, registry, chunk_size, overla
                 directory = Path(temporary)
                 for i, path in enumerate(paths[offset : offset + chunk_size]):
                     (directory / f"{i:06d}.png").symlink_to(path.resolve())
-                with closing(backend.segment_video(directory, "pothole")) as iterator:
+                with closing(backend.segment_video(directory, prompt)) as iterator:
                     while True:
                         before = time.perf_counter()
                         try:
@@ -298,6 +308,9 @@ def run_pass(backend, choices, paths, name, output, registry, chunk_size, overla
 
 
 def run_scan(args, backend_factory=None):
+    prompt = getattr(args, "prompt", "pothole")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("Scan prompt cannot be empty")
     if args.resume:
         previous = json.loads((args.output / "scan.json").read_text())
         settings = {
@@ -305,7 +318,10 @@ def run_scan(args, backend_factory=None):
             for key, value in vars(args).items()
             if key not in ("checkpoint", "video", "output", "resume")
         }
-        if any(previous["settings"].get(k) != v for k, v in settings.items()):
+        if any(
+            previous["settings"].get(k, "pothole" if k == "prompt" else None) != v
+            for k, v in settings.items()
+        ):
             raise ValueError("Resume requires the same scan settings")
         if previous["source_video"] != args.video.name:
             raise ValueError("Resume requires the same source video")
@@ -463,6 +479,7 @@ def _run_scan(args, backend_factory=None):
         status="running",
     )
     save_manifest()
+    prompt = getattr(args, "prompt", "pothole").strip()
     registry = TrackRegistry()
     positive, timings = run_pass(
         backend,
@@ -473,6 +490,7 @@ def _run_scan(args, backend_factory=None):
         registry,
         args.chunk_frames,
         args.overlap_frames,
+        prompt=prompt,
     )
     windows = (
         []
@@ -517,6 +535,7 @@ def _run_scan(args, backend_factory=None):
             registry,
             args.chunk_frames,
             args.overlap_frames,
+            prompt=prompt,
         )
         timings.extend(fine_timings)
     observations, details = [], []
@@ -526,12 +545,12 @@ def _run_scan(args, backend_factory=None):
         recorded = created + timedelta(seconds=choice.source_seconds)
         gps = nearest_telemetry(telemetry.samples, recorded)
         detection = replace(best["detection"], object_id=identity)
-        frame = FrameSegmentations(identity, "pothole", "local", (detection,))
+        frame = FrameSegmentations(identity, prompt, "local", (detection,))
         write_frame_result(args.video, frame, args.output, source_frame=best["image"])
         observations.append(
             Observation(
                 identity,
-                "pothole",
+                prompt,
                 "local",
                 min(track["times"]),
                 max(track["times"]),

@@ -54,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Distance-sampled local scan with native-frame candidate refinement",
     )
     scan.add_argument("video", type=Path)
+    scan.add_argument("--prompt", default="pothole", help="Hazard concept prompt")
     scan.add_argument(
         "--checkpoint", type=Path, default=os.environ.get("ROADLENS_SAM_CHECKPOINT")
     )
