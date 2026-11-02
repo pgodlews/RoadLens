@@ -38,5 +38,8 @@ dist/
 /.tools/
 *.gguf
 
+# Local code review notes
+notes_*review.md
+
 # Operating system
 .DS_Store
