@@ -96,6 +96,16 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--pmtiles", type=Path, required=True)
     report.add_argument("--host", default="127.0.0.1")
     report.add_argument("--port", type=int, default=8765)
+
+    triage = commands.add_parser(
+        "triage",
+        help="Run VLM triage and draft a human-review summary report",
+    )
+    triage.add_argument("output", type=Path)
+    triage.add_argument("--vlm", choices=("local", "remote"), default="local")
+    triage.add_argument("--max-candidates", type=int)
+    triage.add_argument("--street-name")
+    triage.add_argument("--place-name")
     return parser
 
 
@@ -186,6 +196,21 @@ def main() -> None:
         )
     elif args.command == "report":
         serve_report(args.output, args.pmtiles, args.host, args.port)
+    elif args.command == "triage":
+        from roadlens.vlm import create_vlm_backend, triage_run_directory
+
+        with create_vlm_backend(args.vlm) as vlm_backend:
+            summary = triage_run_directory(
+                args.output,
+                vlm_backend,
+                max_candidates=args.max_candidates,
+                street_name=args.street_name,
+                place_name=args.place_name,
+            )
+        print(
+            f"Triaged {summary['triaged_candidates']}/{summary['total_observations']} "
+            f"unreviewed candidate(s); draft report: {summary['summary_report']}"
+        )
 
 
 if __name__ == "__main__":
