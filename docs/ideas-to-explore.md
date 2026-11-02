@@ -24,8 +24,40 @@ Items in this document are optional future explorations, **not** required core d
   - Photogrammetric scale from the `991 mm` wheelbase (`2.49 mm/px`), roughly consistent with visually measured `678 mm` `700×28c` tyre diameter and `140 mm` rear rotor (`~2.4–2.6 mm/px`, within `~5%`):
     - **Camera lens height above road (`H_cam`):** `0.89 m ± 0.02 m` (`894 mm` unloaded; `~890 mm` with `~4 mm` rider tyre sag — `555 mm` perpendicular above the axle line plus `335 mm` loaded tyre radius; ~`10 cm` lower than a naive top-of-hoods guess because of the aero stack and under-bar mount).
     - **Longitudinal lens offset:** `~0.05 m` (`5 cm`) behind the front thru-axle (`~0.39 m` behind the front tyre's leading edge).
-    - **Effective `2688×2160` (`5:4` EIS-stabilized) intrinsics (cross-checked via kinematic travel `v * dt`):** `fy / height ≈ 0.81 ± 0.03` (`fx / width ≈ 0.65`, effective `HFOV ≈ 75°`, `VFOV ≈ 63°`, typical pitch `~2°` downward with horizon near `y ≈ 0.47`). Cross-checking this homography on a rural single-track lane recovered a `3.05 m` carriageway width (matching standard `2.75–3.1 m` UK single-track lanes) and sized an elongated nearside SAM 3.1 mask contour at `~13 cm × ~59 cm ± 25%` (`~587 cm²` planimetric area; `~15 cm × ~59 cm` outer bounding box).
+    - **Effective `2688×2160` (`5:4` EIS-stabilized) intrinsics (cross-checked via kinematic travel `v * dt`):** `fy / height ≈ 0.81 ± 0.03` (`fx / width ≈ 0.65`, effective `HFOV ≈ 75°`, `VFOV ≈ 63°`, typical pitch `~2°` downward with horizon near `y ≈ 0.47`). Cross-checking this homography across single-track rural lane segments consistently recovered `3.05–3.51 m` carriageway widths (matching standard `2.75–3.4 m` UK country lanes).
 
 ![Specialized Tarmac SL7 Size L Garmin Varia Vue camera geometry](samples/tarmac-sl7-camera-geometry.jpg)
 
-![Ground-plane pothole size estimate from SAM 3.1 mask and Tarmac SL7 homography](samples/eccup-pothole-size-estimate.jpg)
+### Annotated Demonstration Samples (Eccup Moor Road Survey)
+
+Six representative samples illustrate the size estimation technique across distinct defect categories, scores, and travel directions (all EXIF-stripped and GPS-redacted):
+
+1. **Return #74 — Localized Elongated Cavity (`586.59 s`, score `0.770`):**
+   - Footprint: `~13 cm × ~59 cm (±25%)` (`587 cm²` planimetric area, `1.43–2.02 m` ahead).
+   - Lane width check: `3.05 m (10.0 ft)` at `Z = 4.05 m`.
+   ![Return #74 pothole size estimate](samples/eccup-pothole-size-estimate.jpg)
+
+2. **Outbound #77 — Water-Retaining Road Depression / Cavity (`334.87 s`, score `0.750`):**
+   - Footprint: `~28 cm × ~84 cm (±25%)` (`1,405 cm²` planimetric area, `1.65–2.49 m` ahead).
+   - Lane width check: `3.43 m (11.3 ft)` at `Z = 4.6 m`.
+   ![Outbound #77 cavity size estimate](samples/eccup-pothole-size-estimate-outbound-77.jpg)
+
+3. **Outbound #47 — Compact Pothole in Second Reported Area (`290.36 s`, score `0.546`):**
+   - Footprint: `~17 cm × ~24 cm (±25%)` (`333 cm²` planimetric area, `2.04–2.28 m` ahead).
+   - Lane width check: `3.28 m (10.8 ft)` at `Z = 5.0 m`.
+   ![Outbound #47 compact pothole size estimate](samples/eccup-pothole-size-estimate-outbound-47.jpg)
+
+4. **Outbound #00 — Road-Edge Breakup in First Reported Area (`160.06 s`, score `0.422`):**
+   - Footprint: `~35 cm × ~87 cm (±25%)` (`2,305 cm²` planimetric area, `1.96–2.83 m` ahead).
+   - Lane width check: `3.51 m (11.5 ft)` at `Z = 5.0 m`.
+   ![Outbound #00 road edge breakup size estimate](samples/eccup-pothole-size-estimate-outbound-00.jpg)
+
+5. **Return #32 — Compact Wheel-Track Cavity in Second Reported Area (`482.55 s`, score `0.675`):**
+   - Footprint: `~12 cm × ~25 cm (±25%)` (`216 cm²` planimetric area, `2.05–2.30 m` ahead).
+   - Lane width check: `3.11 m (10.2 ft)` at `Z = 4.0 m`.
+   ![Return #32 compact wheel track cavity size estimate](samples/eccup-pothole-size-estimate-return-32.jpg)
+
+6. **Return #37 — Sunken Patch Edge / Fretted Asphalt Joint (`489.39 s`, score `0.797`):**
+   - Footprint: `~50 cm × ~114 cm (±25%)` (`3,770 cm²` planimetric area, `1.57–2.72 m` ahead).
+   - Lane width check: `3.11 m (10.2 ft)` at `Z = 4.0 m`.
+   ![Return #37 sunken patch edge size estimate](samples/eccup-pothole-size-estimate-return-37.jpg)
