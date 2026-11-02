@@ -305,10 +305,14 @@ def discover_ride_videos(target: Path | Sequence[Path]) -> list[Path]:
 
 def index_ride(
     target: Path | Sequence[Path],
-    probe_fn: Callable[[Path], dict[str, Any]] = probe_video,
-    telemetry_fn: Callable[[Path], TelemetryResult] = read_garmin_telemetry,
+    probe_fn: Callable[[Path], dict[str, Any]] | None = None,
+    telemetry_fn: Callable[[Path], TelemetryResult] | None = None,
     gap_pause_threshold_seconds: float = 5.0,
 ) -> RideIndex:
+    if probe_fn is None:
+        probe_fn = probe_video
+    if telemetry_fn is None:
+        telemetry_fn = read_garmin_telemetry
     video_paths = discover_ride_videos(target)
     raw_entries: list[
         tuple[datetime, float, Path, dict[str, Any], TelemetryResult]

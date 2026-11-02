@@ -106,6 +106,31 @@ def build_parser() -> argparse.ArgumentParser:
     triage.add_argument("--max-candidates", type=int)
     triage.add_argument("--street-name")
     triage.add_argument("--place-name")
+
+    studio = commands.add_parser(
+        "studio",
+        help="Serve the interactive map-first post-ride workflow",
+    )
+    studio.add_argument(
+        "ride",
+        nargs="?",
+        type=Path,
+        help="Optional Garmin clip or folder to index on startup",
+    )
+    studio.add_argument(
+        "--workspace",
+        type=Path,
+        default=Path("artifacts/studio"),
+        help="Workspace directory for targeted jobs and imported clips",
+    )
+    studio.add_argument("--pmtiles", type=Path, required=True)
+    studio.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=os.environ.get("ROADLENS_SAM_CHECKPOINT"),
+    )
+    studio.add_argument("--host", default="127.0.0.1")
+    studio.add_argument("--port", type=int, default=8766)
     return parser
 
 
@@ -210,6 +235,17 @@ def main() -> None:
         print(
             f"Triaged {summary['triaged_candidates']}/{summary['total_observations']} "
             f"unreviewed candidate(s); draft report: {summary['summary_report']}"
+        )
+    elif args.command == "studio":
+        from roadlens.studio import serve_studio
+
+        serve_studio(
+            workspace_dir=args.workspace,
+            pmtiles_path=args.pmtiles,
+            host=args.host,
+            port=args.port,
+            checkpoint_path=args.checkpoint,
+            initial_ride_path=args.ride,
         )
 
 
