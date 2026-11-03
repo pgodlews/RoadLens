@@ -174,6 +174,8 @@ uv run pytest
 uv run ruff check .
 ```
 
+[ARCHITECTURE.md](ARCHITECTURE.md) explains how the modules fit together, with diagrams of the pipeline, frame selection, hosted segmentation and the review lifecycle. [AGENTS.md](AGENTS.md) holds the rules for contributors and coding agents: privacy boundaries, checks and conventions.
+
 ## Privacy and licensing
 
 Source clips, ride telemetry, credentials, and generated analysis artifacts are excluded from Git. Do not commit private location data or footage containing identifiable people or vehicles.
