@@ -318,6 +318,10 @@ larger patches.
 All candidates remain unreviewed
 ([data](evaluation/hazard-sweep-eccup-2026-11-03.json)).
 
+The API documentation states the limit as "up to 16 objects per frame", but
+the capped session stopped adding objects after 16 in total, while no frame
+held more than two at once.
+
 ### Other static hazards on the same corridor
 
 RoadLens takes any text prompt, but this footage has no clear example of a
@@ -345,3 +349,74 @@ absent. All hits were checked by eye from the frames.
   share of each frame affected, rather than one tracked object.
 
 Showing another hazard class properly needs footage that contains one.
+
+### Real-time limits: edge versus hosted
+
+RoadLens is built for post-ride review, but the same detector could run on a
+live camera on a robot or a vehicle. Ten native-resolution frames around both
+reported potholes were used to measure per-frame text-prompt detection
+without tracking. A live camera delivers raw frames, so video decoding was
+left out of the timed loop
+([data](evaluation/realtime-edge-vs-hosted-2026-11-03.json),
+[scripts](../benchmarks/realtime/README.md)).
+
+**Edge.** The SAM 3 image model ran on a Jetson AGX Orin 64 GB (MAXN, bf16)
+and, for comparison, on the RTX 3090:
+
+| Model input | Orin AGX | RTX 3090 | Detections vs 1008 px |
+|---|---|---|---|
+| 1008 px (native) | 2.2 fps, 450 ms | 7.0 fps | reference |
+| 672 px | 4.3 fps, 232 ms | 13.8 fps | same, except the most distant frame |
+| 336 px | 7.5 fps, 133 ms | 29.4 fps | several lost, weaker scores |
+
+- **Camera resolution barely matters:** SAM 3 resizes every frame to its own
+  input size, so a 672 × 540 camera frame was only 1–3 % faster than
+  2688 × 2160. Shrinking the model input is what pays, and 672 px kept the
+  detections.
+- **Compute-bound:** the Orin GPU ran at 99 % and the GPU+SoC rail peaked at
+  42 W. `torch.compile` gained only 3–4 %; TensorRT, a smaller distilled
+  model, or a cheap detector that wakes SAM only on likely frames are the
+  remaining options, none tested.
+
+**Hosted.** The same frames went to `sam-3.1` on the Meta Model API from a
+home connection:
+
+| Mode | Throughput | Delay per result | Price |
+|---|---|---|---|
+| Image, 1 request at a time, 672 × 540 JPEG | 1.1 fps | 0.9 s | $2.50 per 1,000 |
+| Image, 1 at a time, 2688 × 2160 JPEG | 0.55 fps | 1.8 s | $2.50 per 1,000 |
+| Image, 16 in flight | 11.6 fps | 0.9 s | $2.50 per 1,000 |
+| Image, 48 in flight | 29.7 fps | 1.1 s | $2.50 per 1,000 |
+| Video, 5 s clip | 0.55 s of video per second | 9.1 s after the clip ends | $0.20 per 1,000 frames |
+
+- **Image mode scales with requests in flight** and reached camera rate at
+  48, well inside the 3,000 requests per minute limit, but every result is
+  about a second old and costs 12.5 times as much per frame as video mode:
+  about $36 an hour at 4 frames per second.
+- **Upload size is the one place resolution matters:** a full-resolution
+  JPEG doubles the delay, and 30 fps of 672 px JPEGs needs about 15 Mbit/s of
+  uplink.
+- **Video mode is not real time:** it takes finished clips only. A 1 s clip
+  took 4.9 s end to end, mostly upload and request overhead, and long clips
+  were processed at about 4 frames per second, roughly 2.6 times slower than
+  10 fps footage. Sending three chunks at once did not speed up a 180 s
+  window, which suggests per-account throttling. It suits uploading a ride
+  as it happens, with candidates ready minutes after it ends.
+
+**What this means by vehicle.** RoadLens samples about one frame per metre,
+and a pothole is large enough to detect over roughly the last 15–20 m. On
+the Orin at 672 px:
+
+| Vehicle | Speed | Metres between frames | Metres travelled per inference |
+|---|---|---|---|
+| Warehouse robot, forklift | 2 m/s | 0.5 | 0.5 |
+| Tractor, site machinery | 4 m/s | 0.9 | 0.9 |
+| Bicycle (this footage) | 6.7 m/s | 1.6 | 1.5 |
+| Car at 70 mph | 31 m/s | 7.2 | 7.2 |
+
+Slow machinery gets the one-frame-per-metre density on the Orin, with under
+a metre travelled before each result, which is enough to react. A bicycle
+gets a look every 1.6 m, enough to log hazards live. A motorway car gets
+about two looks at a pothole and moves 31 m during a hosted round trip,
+which might do for coarse logging but not for reacting; it would need
+several times the compute.

@@ -1,0 +1,1304 @@
+{
+ "date": "2026-11-03",
+ "question": "Can RoadLens detect hazards from a live camera stream, on edge hardware or through the Meta Model API?",
+ "frames": "10 frames from the Eccup return pass (585.6-600.3 s) around both rider-reported potholes, decoded beforehand at the native 2688x2160; a live camera delivers raw frames, so decoding is not timed",
+ "prompt": "pothole",
+ "method_edge": "SAM 3 image model (facebook/sam3), each frame detected independently with the text prompt encoded once; bf16 autocast; times cover upload, resize, backbone, decoder and mask upsampling; benchmarks/realtime/edge_sam3.py",
+ "method_hosted": "sam-3.1 on https://api.meta.ai/v1 from a home broadband connection in the UK; benchmarks/realtime/hosted_sam.py",
+ "hardware": {
+  "orin_agx": "Jetson AGX Orin 64 GB, JetPack 6.2.3, MAXN, torch 2.10 (Jetson AI Lab wheel); other GPU services stopped during the runs; GPU at 99 %, GPU+SoC rail peaked at 42 W",
+  "rtx_3090": "RTX 3090 24 GB, torch 2.10+cu128"
+ },
+ "edge": {
+  "orin_agx": {
+   "device": "Orin",
+   "torch": "2.10.0",
+   "dtype": "bf16",
+   "prompt": "pothole",
+   "threshold": 0.3,
+   "runs": [
+    {
+     "model_size": 1008,
+     "input": "2688x2160",
+     "median_ms": 450.0,
+     "p90_ms": 453.4,
+     "fps": 2.22,
+     "peak_mem_gb": 5.68,
+     "per_frame": [
+      {
+       "detections": 1,
+       "max_score": 0.494
+      },
+      {
+       "detections": 4,
+       "max_score": 0.758
+      },
+      {
+       "detections": 5,
+       "max_score": 0.738
+      },
+      {
+       "detections": 4,
+       "max_score": 0.684
+      },
+      {
+       "detections": 8,
+       "max_score": 0.676
+      },
+      {
+       "detections": 7,
+       "max_score": 0.703
+      },
+      {
+       "detections": 1,
+       "max_score": 0.852
+      },
+      {
+       "detections": 1,
+       "max_score": 0.613
+      },
+      {
+       "detections": 1,
+       "max_score": 0.82
+      },
+      {
+       "detections": 1,
+       "max_score": 0.828
+      }
+     ]
+    },
+    {
+     "model_size": 1008,
+     "input": "1344x1080",
+     "median_ms": 448.0,
+     "p90_ms": 449.7,
+     "fps": 2.23,
+     "peak_mem_gb": 5.68,
+     "per_frame": [
+      {
+       "detections": 2,
+       "max_score": 0.508
+      },
+      {
+       "detections": 4,
+       "max_score": 0.75
+      },
+      {
+       "detections": 6,
+       "max_score": 0.734
+      },
+      {
+       "detections": 5,
+       "max_score": 0.645
+      },
+      {
+       "detections": 9,
+       "max_score": 0.664
+      },
+      {
+       "detections": 7,
+       "max_score": 0.68
+      },
+      {
+       "detections": 1,
+       "max_score": 0.844
+      },
+      {
+       "detections": 1,
+       "max_score": 0.637
+      },
+      {
+       "detections": 1,
+       "max_score": 0.797
+      },
+      {
+       "detections": 1,
+       "max_score": 0.828
+      }
+     ]
+    },
+    {
+     "model_size": 1008,
+     "input": "672x540",
+     "median_ms": 447.7,
+     "p90_ms": 450.4,
+     "fps": 2.23,
+     "peak_mem_gb": 5.68,
+     "per_frame": [
+      {
+       "detections": 2,
+       "max_score": 0.543
+      },
+      {
+       "detections": 4,
+       "max_score": 0.75
+      },
+      {
+       "detections": 5,
+       "max_score": 0.758
+      },
+      {
+       "detections": 4,
+       "max_score": 0.652
+      },
+      {
+       "detections": 10,
+       "max_score": 0.723
+      },
+      {
+       "detections": 6,
+       "max_score": 0.652
+      },
+      {
+       "detections": 1,
+       "max_score": 0.789
+      },
+      {
+       "detections": 1,
+       "max_score": 0.648
+      },
+      {
+       "detections": 1,
+       "max_score": 0.773
+      },
+      {
+       "detections": 1,
+       "max_score": 0.836
+      }
+     ]
+    },
+    {
+     "model_size": 672,
+     "input": "2688x2160",
+     "median_ms": 236.2,
+     "p90_ms": 240.9,
+     "fps": 4.23,
+     "peak_mem_gb": 5.41,
+     "per_frame": [
+      {
+       "detections": 1,
+       "max_score": 0.32
+      },
+      {
+       "detections": 3,
+       "max_score": 0.785
+      },
+      {
+       "detections": 2,
+       "max_score": 0.797
+      },
+      {
+       "detections": 3,
+       "max_score": 0.77
+      },
+      {
+       "detections": 10,
+       "max_score": 0.781
+      },
+      {
+       "detections": 6,
+       "max_score": 0.766
+      },
+      {
+       "detections": 1,
+       "max_score": 0.809
+      },
+      {
+       "detections": 1,
+       "max_score": 0.656
+      },
+      {
+       "detections": 1,
+       "max_score": 0.82
+      },
+      {
+       "detections": 1,
+       "max_score": 0.898
+      }
+     ]
+    },
+    {
+     "model_size": 672,
+     "input": "1344x1080",
+     "median_ms": 232.0,
+     "p90_ms": 233.3,
+     "fps": 4.31,
+     "peak_mem_gb": 5.41,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.777
+      },
+      {
+       "detections": 2,
+       "max_score": 0.785
+      },
+      {
+       "detections": 3,
+       "max_score": 0.746
+      },
+      {
+       "detections": 11,
+       "max_score": 0.777
+      },
+      {
+       "detections": 6,
+       "max_score": 0.766
+      },
+      {
+       "detections": 1,
+       "max_score": 0.797
+      },
+      {
+       "detections": 1,
+       "max_score": 0.672
+      },
+      {
+       "detections": 1,
+       "max_score": 0.816
+      },
+      {
+       "detections": 1,
+       "max_score": 0.898
+      }
+     ]
+    },
+    {
+     "model_size": 672,
+     "input": "672x540",
+     "median_ms": 231.4,
+     "p90_ms": 231.6,
+     "fps": 4.32,
+     "peak_mem_gb": 5.41,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.773
+      },
+      {
+       "detections": 3,
+       "max_score": 0.773
+      },
+      {
+       "detections": 3,
+       "max_score": 0.754
+      },
+      {
+       "detections": 11,
+       "max_score": 0.754
+      },
+      {
+       "detections": 6,
+       "max_score": 0.789
+      },
+      {
+       "detections": 2,
+       "max_score": 0.754
+      },
+      {
+       "detections": 1,
+       "max_score": 0.699
+      },
+      {
+       "detections": 1,
+       "max_score": 0.742
+      },
+      {
+       "detections": 1,
+       "max_score": 0.895
+      }
+     ]
+    },
+    {
+     "model_size": 336,
+     "input": "2688x2160",
+     "median_ms": 137.2,
+     "p90_ms": 147.0,
+     "fps": 7.29,
+     "peak_mem_gb": 5.02,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 1,
+       "max_score": 0.381
+      },
+      {
+       "detections": 2,
+       "max_score": 0.684
+      },
+      {
+       "detections": 3,
+       "max_score": 0.711
+      },
+      {
+       "detections": 5,
+       "max_score": 0.531
+      },
+      {
+       "detections": 4,
+       "max_score": 0.68
+      },
+      {
+       "detections": 1,
+       "max_score": 0.73
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 4,
+       "max_score": 0.447
+      },
+      {
+       "detections": 2,
+       "max_score": 0.746
+      }
+     ]
+    },
+    {
+     "model_size": 336,
+     "input": "1344x1080",
+     "median_ms": 133.1,
+     "p90_ms": 133.7,
+     "fps": 7.51,
+     "peak_mem_gb": 5.02,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 1,
+       "max_score": 0.367
+      },
+      {
+       "detections": 2,
+       "max_score": 0.703
+      },
+      {
+       "detections": 3,
+       "max_score": 0.715
+      },
+      {
+       "detections": 5,
+       "max_score": 0.543
+      },
+      {
+       "detections": 4,
+       "max_score": 0.656
+      },
+      {
+       "detections": 1,
+       "max_score": 0.719
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.414
+      },
+      {
+       "detections": 2,
+       "max_score": 0.754
+      }
+     ]
+    },
+    {
+     "model_size": 336,
+     "input": "672x540",
+     "median_ms": 131.5,
+     "p90_ms": 132.0,
+     "fps": 7.6,
+     "peak_mem_gb": 5.02,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 2,
+       "max_score": 0.688
+      },
+      {
+       "detections": 3,
+       "max_score": 0.715
+      },
+      {
+       "detections": 7,
+       "max_score": 0.49
+      },
+      {
+       "detections": 4,
+       "max_score": 0.672
+      },
+      {
+       "detections": 1,
+       "max_score": 0.727
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 1,
+       "max_score": 0.312
+      },
+      {
+       "detections": 2,
+       "max_score": 0.75
+      }
+     ]
+    }
+   ],
+   "frame_count": 10
+  },
+  "orin_agx_torch_compile": {
+   "device": "Orin",
+   "torch": "2.10.0",
+   "dtype": "bf16",
+   "compile": true,
+   "prompt": "pothole",
+   "threshold": 0.3,
+   "runs": [
+    {
+     "model_size": 672,
+     "input": "1344x1080",
+     "median_ms": 223.3,
+     "p90_ms": 225.0,
+     "fps": 4.48,
+     "peak_mem_gb": 4.41,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.777
+      },
+      {
+       "detections": 2,
+       "max_score": 0.781
+      },
+      {
+       "detections": 3,
+       "max_score": 0.754
+      },
+      {
+       "detections": 11,
+       "max_score": 0.773
+      },
+      {
+       "detections": 6,
+       "max_score": 0.766
+      },
+      {
+       "detections": 1,
+       "max_score": 0.793
+      },
+      {
+       "detections": 1,
+       "max_score": 0.672
+      },
+      {
+       "detections": 1,
+       "max_score": 0.812
+      },
+      {
+       "detections": 1,
+       "max_score": 0.898
+      }
+     ]
+    },
+    {
+     "model_size": 1008,
+     "input": "1344x1080",
+     "median_ms": 434.2,
+     "p90_ms": 436.4,
+     "fps": 2.3,
+     "peak_mem_gb": 6.09,
+     "per_frame": [
+      {
+       "detections": 2,
+       "max_score": 0.508
+      },
+      {
+       "detections": 4,
+       "max_score": 0.754
+      },
+      {
+       "detections": 6,
+       "max_score": 0.734
+      },
+      {
+       "detections": 5,
+       "max_score": 0.648
+      },
+      {
+       "detections": 9,
+       "max_score": 0.656
+      },
+      {
+       "detections": 7,
+       "max_score": 0.672
+      },
+      {
+       "detections": 1,
+       "max_score": 0.844
+      },
+      {
+       "detections": 1,
+       "max_score": 0.645
+      },
+      {
+       "detections": 1,
+       "max_score": 0.797
+      },
+      {
+       "detections": 1,
+       "max_score": 0.828
+      }
+     ]
+    }
+   ],
+   "frame_count": 10
+  },
+  "rtx_3090": {
+   "device": "NVIDIA GeForce RTX 3090",
+   "torch": "2.10.0+cu128",
+   "dtype": "bf16",
+   "prompt": "pothole",
+   "threshold": 0.3,
+   "runs": [
+    {
+     "model_size": 1008,
+     "input": "2688x2160",
+     "median_ms": 143.7,
+     "p90_ms": 144.4,
+     "fps": 6.96,
+     "peak_mem_gb": 5.68,
+     "per_frame": [
+      {
+       "detections": 1,
+       "max_score": 0.49
+      },
+      {
+       "detections": 4,
+       "max_score": 0.758
+      },
+      {
+       "detections": 4,
+       "max_score": 0.73
+      },
+      {
+       "detections": 4,
+       "max_score": 0.684
+      },
+      {
+       "detections": 8,
+       "max_score": 0.676
+      },
+      {
+       "detections": 7,
+       "max_score": 0.703
+      },
+      {
+       "detections": 1,
+       "max_score": 0.852
+      },
+      {
+       "detections": 1,
+       "max_score": 0.613
+      },
+      {
+       "detections": 1,
+       "max_score": 0.82
+      },
+      {
+       "detections": 1,
+       "max_score": 0.824
+      }
+     ]
+    },
+    {
+     "model_size": 1008,
+     "input": "1344x1080",
+     "median_ms": 141.2,
+     "p90_ms": 141.7,
+     "fps": 7.08,
+     "peak_mem_gb": 5.68,
+     "per_frame": [
+      {
+       "detections": 1,
+       "max_score": 0.5
+      },
+      {
+       "detections": 4,
+       "max_score": 0.75
+      },
+      {
+       "detections": 6,
+       "max_score": 0.73
+      },
+      {
+       "detections": 5,
+       "max_score": 0.648
+      },
+      {
+       "detections": 9,
+       "max_score": 0.66
+      },
+      {
+       "detections": 7,
+       "max_score": 0.676
+      },
+      {
+       "detections": 1,
+       "max_score": 0.844
+      },
+      {
+       "detections": 1,
+       "max_score": 0.637
+      },
+      {
+       "detections": 1,
+       "max_score": 0.793
+      },
+      {
+       "detections": 1,
+       "max_score": 0.828
+      }
+     ]
+    },
+    {
+     "model_size": 1008,
+     "input": "672x540",
+     "median_ms": 139.7,
+     "p90_ms": 140.7,
+     "fps": 7.16,
+     "peak_mem_gb": 5.68,
+     "per_frame": [
+      {
+       "detections": 2,
+       "max_score": 0.543
+      },
+      {
+       "detections": 4,
+       "max_score": 0.75
+      },
+      {
+       "detections": 5,
+       "max_score": 0.762
+      },
+      {
+       "detections": 4,
+       "max_score": 0.648
+      },
+      {
+       "detections": 10,
+       "max_score": 0.723
+      },
+      {
+       "detections": 6,
+       "max_score": 0.652
+      },
+      {
+       "detections": 1,
+       "max_score": 0.785
+      },
+      {
+       "detections": 1,
+       "max_score": 0.641
+      },
+      {
+       "detections": 1,
+       "max_score": 0.773
+      },
+      {
+       "detections": 1,
+       "max_score": 0.836
+      }
+     ]
+    },
+    {
+     "model_size": 672,
+     "input": "2688x2160",
+     "median_ms": 74.9,
+     "p90_ms": 75.9,
+     "fps": 13.35,
+     "peak_mem_gb": 5.41,
+     "per_frame": [
+      {
+       "detections": 1,
+       "max_score": 0.322
+      },
+      {
+       "detections": 3,
+       "max_score": 0.785
+      },
+      {
+       "detections": 2,
+       "max_score": 0.797
+      },
+      {
+       "detections": 3,
+       "max_score": 0.77
+      },
+      {
+       "detections": 10,
+       "max_score": 0.777
+      },
+      {
+       "detections": 6,
+       "max_score": 0.762
+      },
+      {
+       "detections": 1,
+       "max_score": 0.809
+      },
+      {
+       "detections": 1,
+       "max_score": 0.656
+      },
+      {
+       "detections": 1,
+       "max_score": 0.82
+      },
+      {
+       "detections": 1,
+       "max_score": 0.898
+      }
+     ]
+    },
+    {
+     "model_size": 672,
+     "input": "1344x1080",
+     "median_ms": 72.5,
+     "p90_ms": 73.2,
+     "fps": 13.8,
+     "peak_mem_gb": 5.41,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.777
+      },
+      {
+       "detections": 2,
+       "max_score": 0.785
+      },
+      {
+       "detections": 3,
+       "max_score": 0.746
+      },
+      {
+       "detections": 11,
+       "max_score": 0.777
+      },
+      {
+       "detections": 6,
+       "max_score": 0.766
+      },
+      {
+       "detections": 1,
+       "max_score": 0.793
+      },
+      {
+       "detections": 1,
+       "max_score": 0.672
+      },
+      {
+       "detections": 1,
+       "max_score": 0.816
+      },
+      {
+       "detections": 1,
+       "max_score": 0.898
+      }
+     ]
+    },
+    {
+     "model_size": 672,
+     "input": "672x540",
+     "median_ms": 72.1,
+     "p90_ms": 72.7,
+     "fps": 13.87,
+     "peak_mem_gb": 5.41,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.77
+      },
+      {
+       "detections": 3,
+       "max_score": 0.773
+      },
+      {
+       "detections": 3,
+       "max_score": 0.75
+      },
+      {
+       "detections": 11,
+       "max_score": 0.754
+      },
+      {
+       "detections": 6,
+       "max_score": 0.789
+      },
+      {
+       "detections": 2,
+       "max_score": 0.754
+      },
+      {
+       "detections": 1,
+       "max_score": 0.699
+      },
+      {
+       "detections": 1,
+       "max_score": 0.738
+      },
+      {
+       "detections": 1,
+       "max_score": 0.898
+      }
+     ]
+    },
+    {
+     "model_size": 336,
+     "input": "2688x2160",
+     "median_ms": 36.7,
+     "p90_ms": 37.4,
+     "fps": 27.27,
+     "peak_mem_gb": 5.05,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 1,
+       "max_score": 0.365
+      },
+      {
+       "detections": 2,
+       "max_score": 0.68
+      },
+      {
+       "detections": 3,
+       "max_score": 0.703
+      },
+      {
+       "detections": 6,
+       "max_score": 0.527
+      },
+      {
+       "detections": 4,
+       "max_score": 0.68
+      },
+      {
+       "detections": 1,
+       "max_score": 0.719
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 4,
+       "max_score": 0.453
+      },
+      {
+       "detections": 2,
+       "max_score": 0.742
+      }
+     ]
+    },
+    {
+     "model_size": 336,
+     "input": "1344x1080",
+     "median_ms": 34.0,
+     "p90_ms": 34.5,
+     "fps": 29.42,
+     "peak_mem_gb": 5.05,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 1,
+       "max_score": 0.375
+      },
+      {
+       "detections": 2,
+       "max_score": 0.695
+      },
+      {
+       "detections": 3,
+       "max_score": 0.723
+      },
+      {
+       "detections": 5,
+       "max_score": 0.535
+      },
+      {
+       "detections": 4,
+       "max_score": 0.656
+      },
+      {
+       "detections": 1,
+       "max_score": 0.707
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 3,
+       "max_score": 0.408
+      },
+      {
+       "detections": 2,
+       "max_score": 0.754
+      }
+     ]
+    },
+    {
+     "model_size": 336,
+     "input": "672x540",
+     "median_ms": 33.3,
+     "p90_ms": 34.0,
+     "fps": 30.03,
+     "peak_mem_gb": 5.05,
+     "per_frame": [
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 1,
+       "max_score": 0.303
+      },
+      {
+       "detections": 2,
+       "max_score": 0.68
+      },
+      {
+       "detections": 3,
+       "max_score": 0.707
+      },
+      {
+       "detections": 7,
+       "max_score": 0.527
+      },
+      {
+       "detections": 4,
+       "max_score": 0.672
+      },
+      {
+       "detections": 1,
+       "max_score": 0.723
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 0,
+       "max_score": null
+      },
+      {
+       "detections": 2,
+       "max_score": 0.75
+      }
+     ]
+    }
+   ],
+   "frame_count": 10
+  }
+ },
+ "hosted": {
+  "pricing": {
+   "image": "$2.50 per 1,000 images",
+   "video": "$0.20 per 1,000 frames, minimum 50 per request"
+  },
+  "rate_limit_rpm": 3000,
+  "runs": [
+   {
+    "mode": "image_sequential",
+    "input": "2688x2160",
+    "jpeg_kb": 782,
+    "median_s": 1.82,
+    "p90_s": 2.42,
+    "min_s": 1.46,
+    "first_event_median_s": 1.28,
+    "fps": 0.55,
+    "detections": [
+     [
+      1,
+      0.531
+     ],
+     [
+      2,
+      0.758
+     ],
+     [
+      2,
+      0.739
+     ],
+     [
+      2,
+      0.64
+     ],
+     [
+      4,
+      0.7
+     ],
+     [
+      1,
+      0.691
+     ],
+     [
+      1,
+      0.84
+     ],
+     [
+      1,
+      0.66
+     ],
+     [
+      1,
+      0.813
+     ],
+     [
+      1,
+      0.813
+     ]
+    ]
+   },
+   {
+    "mode": "image_sequential",
+    "input": "1344x1080",
+    "jpeg_kb": 230,
+    "median_s": 1.43,
+    "p90_s": 2.14,
+    "min_s": 0.54,
+    "first_event_median_s": 0.92,
+    "fps": 0.7,
+    "detections": [
+     [
+      1,
+      0.519
+     ],
+     [
+      1,
+      0.762
+     ],
+     [
+      2,
+      0.746
+     ],
+     [
+      1,
+      0.621
+     ],
+     [
+      4,
+      0.704
+     ],
+     [
+      1,
+      0.719
+     ],
+     [
+      1,
+      0.816
+     ],
+     [
+      1,
+      0.675
+     ],
+     [
+      1,
+      0.808
+     ],
+     [
+      1,
+      0.84
+     ]
+    ]
+   },
+   {
+    "mode": "image_sequential",
+    "input": "672x540",
+    "jpeg_kb": 62,
+    "median_s": 0.89,
+    "p90_s": 1.04,
+    "min_s": 0.5,
+    "first_event_median_s": 0.69,
+    "fps": 1.13,
+    "detections": [
+     [
+      0,
+      null
+     ],
+     [
+      1,
+      0.71
+     ],
+     [
+      2,
+      0.758
+     ],
+     [
+      2,
+      0.683
+     ],
+     [
+      2,
+      0.683
+     ],
+     [
+      1,
+      0.636
+     ],
+     [
+      1,
+      0.836
+     ],
+     [
+      1,
+      0.652
+     ],
+     [
+      1,
+      0.73
+     ],
+     [
+      1,
+      0.852
+     ]
+    ]
+   },
+   {
+    "mode": "image_concurrent",
+    "input": "672x540",
+    "in_flight": 4,
+    "requests": 32,
+    "wall_s": 9.0,
+    "throughput_fps": 3.56,
+    "median_s": 0.92,
+    "p90_s": 1.5,
+    "min_s": 0.48
+   },
+   {
+    "mode": "image_concurrent",
+    "input": "672x540",
+    "in_flight": 8,
+    "requests": 32,
+    "wall_s": 4.3,
+    "throughput_fps": 7.46,
+    "median_s": 0.87,
+    "p90_s": 1.16,
+    "min_s": 0.65
+   },
+   {
+    "mode": "image_concurrent",
+    "input": "672x540",
+    "in_flight": 16,
+    "requests": 32,
+    "wall_s": 2.8,
+    "throughput_fps": 11.59,
+    "median_s": 0.88,
+    "p90_s": 1.39,
+    "min_s": 0.51
+   },
+   {
+    "mode": "image_concurrent",
+    "input": "672x540",
+    "in_flight": 32,
+    "requests": 96,
+    "wall_s": 4.1,
+    "throughput_fps": 23.2,
+    "median_s": 1.13,
+    "p90_s": 1.64,
+    "min_s": 0.39
+   },
+   {
+    "mode": "image_concurrent",
+    "input": "672x540",
+    "in_flight": 48,
+    "requests": 96,
+    "wall_s": 3.2,
+    "throughput_fps": 29.69,
+    "median_s": 1.06,
+    "p90_s": 1.41,
+    "min_s": 0.43
+   },
+   {
+    "mode": "video_chunk",
+    "seconds": 1,
+    "frames": 10,
+    "width": 1280,
+    "upload_s": 2.83,
+    "segment_s": 2.09,
+    "first_event_s": 1.19,
+    "end_to_end_s": 4.92,
+    "realtime_factor": 4.92
+   },
+   {
+    "mode": "video_chunk",
+    "seconds": 2,
+    "frames": 20,
+    "width": 1280,
+    "upload_s": 3.49,
+    "segment_s": 2.68,
+    "first_event_s": 1.12,
+    "end_to_end_s": 6.17,
+    "realtime_factor": 3.09
+   },
+   {
+    "mode": "video_chunk",
+    "seconds": 5,
+    "frames": 50,
+    "width": 1280,
+    "upload_s": 5.43,
+    "segment_s": 3.66,
+    "first_event_s": 1.38,
+    "end_to_end_s": 9.09,
+    "realtime_factor": 1.82
+   }
+  ]
+ },
+ "caveats": [
+  "Per-frame detection only; no tracking between frames.",
+  "Ten frames from one road; detection counts are a sanity check, not an accuracy measure.",
+  "Edge runs use the SAM 3 image checkpoint; RoadLens batch scans use SAM 3.1 multiplex video tracking.",
+  "Hosted latency includes the home connection; mobile uplinks will be slower."
+ ]
+}

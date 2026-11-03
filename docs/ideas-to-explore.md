@@ -74,3 +74,14 @@ Six representative samples illustrate the size estimation technique across disti
   3. **Phone photos:** port `photo_metadata.py` for per-photo EXIF GPS and add a still-image path through Studio ("photograph a pothole while walking"); SAM 3.1 already segments single images.
   4. **DJI:** port `dji_telemetry.py` for embedded GPS and GPS SRT sidecar files, and carry its OSVplat MIT attribution into `NOTICE`.
 - **Guardrails:** Most built-in phone camera apps save one location per clip rather than a timed track. Label such clips as clip-level geotags, not per-frame positions. Do not align videos with separate GPX tracks without explicit, verified clock synchronisation. Claim support only for camera families validated on real footage; Ride Studio notes that the DJI GPS-remote variant has not yet been validated against a real recording.
+
+## 4. Live Detection on Slow Vehicles (Edge AI)
+
+- **Priority:** Exploratory (post-hackathon)
+- **Motivation:** Measured on 3 November, SAM 3 detects a text-prompted hazard on a Jetson AGX Orin at 4.3 fps with 672 px model input, about one frame per metre at forklift or tractor speeds ([development log](development-log.md#real-time-limits-edge-versus-hosted)). That fits warehouse robots, agricultural and site machinery, and live hazard logging on a bike.
+- **Approach:**
+  1. Read raw frames from a CSI or USB camera (no video decoding) and run the 672 px detector on a frame-per-metre schedule driven by wheel or GPS speed, reusing RoadLens' distance sampling.
+  2. Try TensorRT FP16 for the image encoder, and a cascade in which a small fast detector wakes SAM 3 only on likely frames.
+  3. Keep results as unreviewed candidates with the same review and export path; acting on a detection (slowing, steering) is a separate safety case.
+- **Guardrails:** Not for motorway speeds: at 31 m/s a frame comes every 7 m and a hosted round trip covers 31 m. Hosted image mode costs $2.50 per 1,000 frames and needs a fast uplink, so live use at fleet scale belongs on the edge.
+
