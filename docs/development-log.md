@@ -465,4 +465,31 @@ NAS):
 - Stop handling on the car's own speed: a minute of parking manoeuvres took
   10 frames instead of 128.
 
+
+The whole 22-minute, 4.4 km drive was then scanned for `pothole` on the
+RTX 3090, three cameras in two parallel processes (about 11 GB of VRAM
+each):
+
+| Camera | Candidates | SAM frames (share of native) | GPU time |
+|---|---:|---:|---:|
+| Front | 74 | 7,065 (25 %) | 52 min |
+| Back | 95 | 7,191 (26 %) | 62 min |
+| Left repeater | 110 | 7,455 (26 %) | 65 min |
+
+- **The back camera sees defects best:** it looks almost straight down at the
+  road behind the car, so crazing, cracked patches and pothole edges are
+  plain. The left repeater sees the nearside gutter, where potholes collect.
+  The front camera finds the worst streets, but most of its candidates are
+  lane markings and plain asphalt.
+- **Ironwork scores highest on the close cameras:** manhole covers, drain
+  grates and pavement utility covers reached 0.84–0.88, above the real
+  potholes (0.5–0.7). Triage needs an ironwork category before close-range
+  cameras are useful without review.
+- **A visual shortlist** picked 14 clear defects at about 10 places,
+  including a badly broken residential street seen by both the front and
+  back cameras.
+- **Decoder fix:** some Tesla camera files open on a non-keyframe and reject a
+  seek to the start; `decode_frames` no longer seeks at time zero and falls
+  back to decoding from the start when a seek is refused.
+
 This footage includes the rider's home area and stays local.

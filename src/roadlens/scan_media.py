@@ -18,7 +18,13 @@ def decode_frames(source: Path, start: float, end: float) -> Iterator:
         stream = container.streams.video[0]
         stream.thread_type = "AUTO"
         origin = stream.start_time or 0
-        container.seek(int(start / stream.time_base) + origin, stream=stream)
+        if start > 0:
+            try:
+                container.seek(int(start / stream.time_base) + origin, stream=stream)
+            except av.error.FFmpegError:
+                # Some Tesla camera files reject seeks; decoding from the
+                # start is slower but finds the same frames.
+                container.seek(origin, stream=stream, any_frame=True)
         previous = None
         for frame in container.decode(stream):
             if frame.pts is None:
