@@ -4,6 +4,7 @@ Items in this document are optional future explorations, **not** required core d
 
 ## 1. Kinematic Ground-Plane Sizing from SAM 3.1 Multi-Frame Tracks + Garmin Speed
 
+- **Status (3 November 2026):** Implemented as a calibration cross-check. `roadlens.sizing.fit_kinematic_geometry` fits the horizon and camera height × focal length from tracked mask edges and integrated Garmin speed. On hosted SAM tracks of the two reported Eccup potholes it reproduced the photogrammetric focal length below to within 1 %. Still open: running the fit automatically per ride or per camera, so new mounts calibrate themselves.
 - **Priority:** Nice-to-have
 - **Motivation:** During native `30 fps` refinement (`fine-*` windows in `roadlens scan`), SAM 3.1 already tracks candidate masks across `10–60+` consecutive frames while Garmin telemetry provides forward ground speed `v` (`speed_mps`).
 - **Approach:**
@@ -14,6 +15,7 @@ Items in this document are optional future explorations, **not** required core d
 
 ## 2. Calibrated Ground-Plane Homography / Inverse Perspective Mapping (IPM)
 
+- **Status (3 November 2026):** Implemented in `src/roadlens/sizing.py` with the Tarmac SL7 calibration below as the default camera. Every scan now adds a `size_estimate` (footprint along × across the road with a range) from all stored masks of a candidate, shown in Studio and quoted as approximate in draft reports. Not yet done: surface area, lens-distortion correction, and validation against a tape measure.
 - **Priority:** Nice-to-have (single-frame fallback when multi-frame tracking is short or speed is unavailable)
 - **Motivation:** Some detections appear cleanly in only a few frames or near stops/junctions where kinematic scale recovery is noisy.
 - **Approach:**

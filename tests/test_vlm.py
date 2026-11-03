@@ -316,3 +316,37 @@ def test_remote_vlm_explains_exhausted_reasoning_budget():
     remote = RemoteVlmBackend(api_key="test-key", transport=fake_transport)
     with pytest.raises(RuntimeError, match="ROADLENS_VLM_REASONING_TOKENS"):
         remote.chat_completion([])
+
+
+def test_reports_quote_size_estimates_as_approximate():
+    obs = [
+        {
+            "object_id": 0,
+            "prompt": "pothole",
+            "review_status": "confirmed",
+            "best_source_seconds": 586.6,
+            "latitude": 53.87559,
+            "longitude": -1.53964,
+            "size_estimate": {"status": "estimated", "display": "≈ 65 × 15 cm"},
+        },
+        {
+            "object_id": 1,
+            "prompt": "pothole",
+            "review_status": "confirmed",
+            "size_estimate": {"status": "unavailable", "reason": "cut off"},
+        },
+    ]
+    report = format_deterministic_summary_report(obs)
+    assert "- **Approx. size (camera geometry estimate):** ≈ 65 × 15 cm" in report
+    assert report.count("Approx. size") == 1
+    assert "depth is not estimated" in report
+
+    prompts = []
+
+    def fake_transport(base_url, api_key, payload):
+        prompts.append(payload["messages"][0]["content"])
+        return {"choices": [{"message": {"content": "Draft"}}]}
+
+    RemoteVlmBackend(api_key="k", transport=fake_transport).draft_summary_report(obs)
+    assert '"size_estimate": "\\u2248 65 \\u00d7 15 cm"' in prompts[0]
+    assert "never state depth" in prompts[0]

@@ -20,6 +20,7 @@ from roadlens.media import probe_video
 from roadlens.output import write_frame_result
 from roadlens.sampling import refinement_windows, select_frames, speed_at_frames
 from roadlens.scan_media import coverage, measure_frames, save_selected_frames
+from roadlens.sizing import annotate_run_sizes
 from roadlens.telemetry import read_garmin_telemetry
 
 
@@ -586,6 +587,7 @@ def _run_scan(args, backend_factory=None):
             }
         )
     write_observations(observations, args.video, args.output)
+    annotate_run_sizes(args.output)
     (args.output / "evidence-selection.json").write_text(json.dumps(details, indent=2))
     manifest.update(
         status="complete",

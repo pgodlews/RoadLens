@@ -139,6 +139,19 @@ def studio_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         ),
         encoding="utf-8",
     )
+    # A local scan's frame log: the candidate's own box (deduplicated), another
+    # pothole in the same frame, and a frame-filling merged box (ignored).
+    frame_log_row = {
+        "source_seconds": 40.5,
+        "detections": [
+            {"box_xywh_normalized": [0.41, 0.6, 0.2, 0.1]},
+            {"box_xywh_normalized": [0.7, 0.55, 0.1, 0.05]},
+            {"box_xywh_normalized": [0.0, 0.3, 0.9, 0.7]},
+        ],
+    }
+    (run_dir / "frames.jsonl").write_text(
+        json.dumps(frame_log_row) + "\n", encoding="utf-8"
+    )
     (run_dir / "observations.json").write_text(
         json.dumps(
             [
@@ -326,6 +339,12 @@ def test_studio_human_review_and_report_workflow(studio_env):
     # The review pane draws each candidate's own box; no result file means none.
     assert run["observations"][0]["box_xywh_normalized"] == [0.4, 0.6, 0.2, 0.1]
     assert "box_xywh_normalized" not in run["observations"][1]
+    # Every other detection in the evidence frame is drawn too.
+    assert run["observations"][0]["frame_detections"] == [
+        {"box": [0.1, 0.1, 0.1, 0.1], "label": ""},
+        {"box": [0.7, 0.55, 0.1, 0.05], "label": ""},
+    ]
+    assert run["observations"][1]["frame_detections"] == []
 
     # Serve evidence PNG & reject path traversal
     overlay_url = run["observations"][0]["overlay_url"]

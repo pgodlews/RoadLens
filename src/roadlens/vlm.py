@@ -479,6 +479,7 @@ class BaseVlmBackend:
                     "longitude": obs.get("longitude"),
                     "location_source": obs.get("location_source"),
                     "vlm_triage": obs.get("vlm_triage"),
+                    "size_estimate": _size_for_report(obs),
                 }
             )
         status_counts = {
@@ -502,7 +503,10 @@ class BaseVlmBackend:
             "and manual submission (never auto-submitted).\n"
             "2. State clearly that any coordinates are Garmin camera GPS positions at "
             "the moment of capture, not surveyed defect coordinates.\n"
-            "3. Never invent physical depth, width, or legal severity ratings.\n"
+            "3. Never invent physical depth, width, or legal severity ratings. "
+            "If an item has a `size_estimate` string, you may quote it verbatim as "
+            "'approx. surface footprint (camera geometry estimate)'; never state "
+            "depth, and never say it meets an intervention threshold.\n"
             "4. `review_status` is the HUMAN decision; `vlm_triage.classification` is "
             "only a model opinion. Call an item 'confirmed' or 'human-confirmed' only "
             "if its review_status is 'confirmed'. Never merge the two in one heading.\n"
@@ -527,6 +531,11 @@ class BaseVlmBackend:
         return body
 
 
+def _size_for_report(obs: dict[str, Any]) -> str | None:
+    size = obs.get("size_estimate") or {}
+    return size.get("display") if size.get("status") == "estimated" else None
+
+
 def format_deterministic_summary_report(
     observations: Sequence[dict[str, Any]],
     *,
@@ -548,8 +557,9 @@ def format_deterministic_summary_report(
         "> **DRAFT FOR HUMAN REVIEW — NOT AUTOMATICALLY SUBMITTED**",
         (
             "> Coordinates below are **camera GPS positions** at video capture time, "
-            "not surveyed defect coordinates. No physical depth or width "
-            "measurements are claimed."
+            "not surveyed defect coordinates. Sizes are approximate road-surface "
+            "footprints from camera geometry, not measurements; depth is not "
+            "estimated."
         ),
         "",
         f"- **Road / Area:** {location_label}",
@@ -598,6 +608,9 @@ def format_deterministic_summary_report(
             lines.append(f"- **VLM triage:** `{cls}` (confidence: `{conf_str}`)")
         if lane:
             lines.append(f"- **Position:** {lane}")
+        size = _size_for_report(obs)
+        if size:
+            lines.append(f"- **Approx. size (camera geometry estimate):** {size}")
         lines.append(f"- **Observation:** {desc}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

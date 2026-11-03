@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from roadlens.backends import create_backend
 from roadlens.media import prepare_analysis_clip, probe_video
 from roadlens.output import write_frame_result
 from roadlens.report import serve_report
+from roadlens.sizing import GARMIN_VARIA_VUE, annotate_run_sizes
 from roadlens.telemetry import read_garmin_telemetry
 
 
@@ -106,6 +108,18 @@ def build_parser() -> argparse.ArgumentParser:
     triage.add_argument("--max-candidates", type=int)
     triage.add_argument("--street-name")
     triage.add_argument("--place-name")
+
+    size = commands.add_parser(
+        "size",
+        help="Estimate approximate road-surface footprints for a scan's candidates",
+    )
+    size.add_argument("output", type=Path)
+    size.add_argument(
+        "--camera-height",
+        type=float,
+        default=GARMIN_VARIA_VUE.camera_height_m,
+        help="Camera lens height above the road in metres (default 0.89)",
+    )
 
     studio = commands.add_parser(
         "studio",
@@ -219,6 +233,7 @@ def main() -> None:
             frames, telemetry.samples, clip_created, args.start, args.fps
         )
         write_observations(observations, args.video, args.output)
+        annotate_run_sizes(args.output)
         print(f"Saved {len(observations)} unreviewed observation(s) to {args.output}")
     elif args.command == "telemetry":
         result = read_garmin_telemetry(args.video)
@@ -243,6 +258,14 @@ def main() -> None:
         )
     elif args.command == "report":
         serve_report(args.output, args.pmtiles, args.host, args.port)
+    elif args.command == "size":
+        geometry = replace(GARMIN_VARIA_VUE, camera_height_m=args.camera_height)
+        for item in annotate_run_sizes(args.output, geometry):
+            size = item["size_estimate"]
+            print(
+                f"#{item['object_id']}: "
+                f"{size.get('display') or size.get('reason')}"
+            )
     elif args.command == "triage":
         from roadlens.vlm import create_vlm_backend, triage_run_directory
 

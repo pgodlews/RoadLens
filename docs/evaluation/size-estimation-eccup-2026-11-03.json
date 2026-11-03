@@ -1,0 +1,249 @@
+{
+  "date": "2026-11-03",
+  "method": "flat_road_camera_geometry_v1 (src/roadlens/sizing.py)",
+  "calibration": {
+    "camera": "Garmin Varia Vue, under-bar mount (Tarmac SL7)",
+    "camera_height_m": 0.89,
+    "focal_over_image_height": 0.81,
+    "horizon_fraction": 0.47,
+    "source": "Photogrammetric measurement of the rider's bike from its 991 mm wheelbase (docs/ideas-to-explore.md, 2 November).",
+    "tolerances": {
+      "horizon_fraction": 0.012,
+      "scale_relative": 0.12,
+      "camera_height_m": 0.03
+    },
+    "kinematic_cross_check": {
+      "data": "hosted SAM 3.1 tracks of the two rider-reported potholes, Eccup return pass 584-596 s, native 2688x2160 at 29.97 fps; travel from integrated Garmin speed (6.3-6.7 m/s); 95 edge observations",
+      "free_fit": {
+        "horizon_fraction": 0.455,
+        "scale": 0.847,
+        "rms_px": 23.0
+      },
+      "at_horizon_0_47": {
+        "scale": 0.725,
+        "focal_over_image_height_at_0_89_m": 0.814,
+        "rms_px": 29.9
+      },
+      "note": "Horizon and scale trade off along a shallow valley; at the measured horizon the tracks give the measured focal length to within 1 %."
+    },
+    "per_frame_consistency": "Pothole length from hosted box rows stayed within about +/-10 % from 6 m to 2 m away; a wrong geometry would make it drift with distance."
+  },
+  "earlier_manual_estimate": {
+    "feature": "rider-reported pothole (return #74, 586.59 s)",
+    "estimate": "~13 x 59 cm (+/-25 %)",
+    "source": "docs/ideas-to-explore.md, hand-annotated 2 November"
+  },
+  "cross_check_local_vs_hosted_masks": [
+    {
+      "feature": "rider-reported pothole",
+      "local_scan_best_frame": {
+        "status": "estimated",
+        "length_cm": 60,
+        "width_cm": 15,
+        "length_range_cm": [
+          50,
+          70
+        ],
+        "width_range_cm": [
+          10,
+          15
+        ],
+        "frames_used": 1,
+        "nearest_distance_m": 1.5
+      },
+      "hosted_studio_run": {
+        "status": "estimated",
+        "length_cm": 65,
+        "width_cm": 15,
+        "length_range_cm": [
+          50,
+          80
+        ],
+        "width_range_cm": [
+          10,
+          15
+        ],
+        "frames_used": 3,
+        "nearest_distance_m": 2.0
+      }
+    },
+    {
+      "feature": "rider-reported broken patch",
+      "local_scan_best_frame": {
+        "status": "estimated",
+        "length_cm": 155,
+        "width_cm": 50,
+        "length_range_cm": [
+          130,
+          190
+        ],
+        "width_range_cm": [
+          45,
+          55
+        ],
+        "frames_used": 1,
+        "nearest_distance_m": 1.4
+      },
+      "hosted_studio_run": {
+        "status": "estimated",
+        "length_cm": 170,
+        "width_cm": 55,
+        "length_range_cm": [
+          135,
+          225
+        ],
+        "width_range_cm": [
+          45,
+          55
+        ],
+        "frames_used": 5,
+        "nearest_distance_m": 2.0
+      }
+    },
+    {
+      "feature": "open cavity",
+      "local_scan_best_frame": {
+        "status": "estimated",
+        "length_cm": 235,
+        "width_cm": 65,
+        "length_range_cm": [
+          165,
+          345
+        ],
+        "width_range_cm": [
+          55,
+          80
+        ],
+        "frames_used": 1,
+        "nearest_distance_m": 6.3
+      },
+      "hosted_studio_run": {
+        "status": "estimated",
+        "length_cm": 145,
+        "width_cm": 65,
+        "length_range_cm": [
+          115,
+          185
+        ],
+        "width_range_cm": [
+          55,
+          70
+        ],
+        "frames_used": 4,
+        "nearest_distance_m": 3.1
+      }
+    }
+  ],
+  "all_local_candidates": {
+    "#2 @ 586.1s": {
+      "status": "estimated",
+      "length_cm": 10,
+      "width_cm": 5,
+      "length_range_cm": [
+        10,
+        10
+      ],
+      "width_range_cm": [
+        5,
+        10
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 2.1
+    },
+    "#0 @ 586.6s": {
+      "status": "estimated",
+      "length_cm": 60,
+      "width_cm": 15,
+      "length_range_cm": [
+        50,
+        70
+      ],
+      "width_range_cm": [
+        10,
+        15
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 1.5
+    },
+    "#4 @ 588.2s": {
+      "status": "estimated",
+      "length_cm": 185,
+      "width_cm": 70,
+      "length_range_cm": [
+        150,
+        225
+      ],
+      "width_range_cm": [
+        65,
+        80
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 1.5
+    },
+    "#5 @ 588.6s": {
+      "status": "estimated",
+      "length_cm": 75,
+      "width_cm": 20,
+      "length_range_cm": [
+        60,
+        90
+      ],
+      "width_range_cm": [
+        20,
+        20
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 1.7
+    },
+    "#3 @ 593.1s": {
+      "status": "estimated",
+      "length_cm": 30,
+      "width_cm": 25,
+      "length_range_cm": [
+        25,
+        35
+      ],
+      "width_range_cm": [
+        25,
+        30
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 1.9
+    },
+    "#7 @ 593.9s": {
+      "status": "unavailable",
+      "reason": "No frame shows the whole candidate within 12 m of the camera."
+    },
+    "#6 @ 594.6s": {
+      "status": "estimated",
+      "length_cm": 155,
+      "width_cm": 50,
+      "length_range_cm": [
+        130,
+        190
+      ],
+      "width_range_cm": [
+        45,
+        55
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 1.4
+    },
+    "#8 @ 600.0s": {
+      "status": "estimated",
+      "length_cm": 235,
+      "width_cm": 65,
+      "length_range_cm": [
+        165,
+        345
+      ],
+      "width_range_cm": [
+        55,
+        80
+      ],
+      "frames_used": 1,
+      "nearest_distance_m": 6.3
+    }
+  },
+  "ground_truth": "None yet. A tape measure on the two reported potholes would validate the absolute scale."
+}

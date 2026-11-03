@@ -235,3 +235,59 @@ Results, both on the 2 November return-pass window:
 This is one window on one road, not a precision or recall measurement. At the
 published prices the run cost well under a dollar (about $0.02 per triage call
 and $0.20 per 1,000 SAM video frames).
+
+### Why hosted SAM returns fewer candidates
+
+Hosted SAM 3.1 found 2–3 objects where the local scan found 8, so the same
+12-second window was sent three ways ([data](evaluation/remote-api-eccup-2026-11-03.json)):
+
+| Hosted input | Objects | Time |
+|---|---|---|
+| Native 2688×2160, 30 fps | 3 (both reported potholes plus a right-side feature near local #3) | 93 s |
+| 1280 px wide, 30 fps | 2 (both reported potholes) | 39 s |
+| Native, 10 fps | 2 (both reported potholes) | 42 s |
+
+Every hosted object scored 0.70–0.76, and across the full pass the hosted run
+returned exactly the local candidates that scored above 0.7 (#0, #6, #8). The
+API has no threshold parameter, so its fixed cut-off, apparently near 0.7, is
+most of the difference; the local scan deliberately keeps detections from
+0.25–0.35 because a sealed patch scored 0.808 and only a human can settle the
+borderline ones. Resolution and frame rate add a little recall on top.
+
+### Approximate size estimation
+
+Every scan now estimates each candidate's footprint on the road
+(`src/roadlens/sizing.py`, `roadlens size`). A flat-road pinhole model maps a
+mask row to distance, `Z = h·f / (y − y_horizon)`, so length along the road
+needs `h·f` and width across it needs only the camera height `h`.
+
+- **Calibration:** the default is the Garmin Varia Vue under the bars of the
+  rider's Tarmac SL7, measured photogrammetrically on 2 November (lens height
+  0.89 m, focal length 0.81 image heights, horizon near 0.47). As an
+  independent check, hosted SAM tracks of both reported potholes were fitted
+  against distance travelled from integrated Garmin speed (95 edge
+  observations). At the measured horizon the tracks give a focal length of
+  0.814, within 1 % of the photogrammetric value.
+- **Estimate:** the median over every stored mask of the candidate (all
+  tracked frames for hosted runs, the best-evidence frame for local scans),
+  rounded to 5 cm, with a range from the calibration tolerances and the
+  frame-to-frame spread. Masks cut off by the frame edge, or more than 12 m
+  away, are not sized.
+- **Results:** the reported pothole is ≈ 60 × 15 cm from the local mask and
+  ≈ 65 × 15 cm from hosted masks; the hand-annotated estimate from 2 November
+  was ≈ 59 × 13 cm. The reported broken patch is ≈ 155 × 50 cm locally and
+  ≈ 170 × 55 cm hosted ([data](evaluation/size-estimation-eccup-2026-11-03.json)).
+- **Guardrails:** sizes are labelled as approximate road-surface footprints in
+  Studio, exports and both report paths; depth is never estimated, and drafted
+  reports may not claim an intervention threshold is met. The model assumes a
+  flat road and a level bike, so raised obstructions (a branch) are not sized
+  meaningfully. No tape-measure ground truth exists yet.
+
+### Every detection in the evidence frame
+
+A frame with several potholes showed only the selected candidate's box. Studio
+now draws the frame's other detections as dashed boxes: labelled with their
+candidate number for hosted runs, which store every detection per frame, and
+taken from the frame log for local scans. Duplicates, specks and frame-filling
+merged masks are skipped. Studio's multi-pass merge also renumbers each copied
+detection so masks stay matched to merged candidates.

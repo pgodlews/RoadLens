@@ -28,12 +28,84 @@ from roadlens.ride import (
     resolve_by_street_name,
     resolve_by_wall_clock,
 )
+from roadlens.sizing import annotate_run_sizes
 from roadlens.vlm import (
     _detection_box_for_observation,
     create_vlm_backend,
     format_deterministic_summary_report,
     triage_run_directory,
 )
+
+# Per-run index of detection boxes by source time, from the scan's frame log.
+_FRAME_BOXES: dict[Path, tuple[float, dict[float, list[list[float]]]]] = {}
+
+
+def _frame_log_boxes(run_dir: Path) -> dict[float, list[list[float]]]:
+    path = run_dir / "frames.jsonl"
+    if not path.is_file():
+        return {}
+    mtime = path.stat().st_mtime
+    cached = _FRAME_BOXES.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    index: dict[float, list[list[float]]] = {}
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            row = json.loads(line)
+            for detection in row.get("detections") or []:
+                index.setdefault(round(row["source_seconds"], 3), []).append(
+                    detection["box_xywh_normalized"]
+                )
+    _FRAME_BOXES[path] = (mtime, index)
+    return index
+
+
+def _other_frame_detections(
+    run_dir: Path,
+    item: dict[str, Any],
+    detections: list[dict[str, Any]],
+    candidate_ids: set[Any],
+) -> list[dict[str, Any]]:
+    """Other SAM detections visible in this candidate's evidence frame.
+
+    Hosted runs store every detection of a frame, labelled by candidate; local
+    scans store only the best one, so the rest come from the frame log.
+    """
+    own = item.get("box_xywh_normalized")
+    shown = [own] if own else []
+    others = []
+
+    def add(box: list[float], label: str) -> None:
+        # Skip specks too small to read, frame-filling merged masks, and boxes
+        # that mostly overlap one already shown (the same feature again).
+        if box[2] < 0.015 or box[3] < 0.01 or box[2] * box[3] > 0.25:
+            return
+        if any(_overlap(box, b) >= 0.5 for b in shown):
+            return
+        shown.append(box)
+        others.append({"box": box, "label": label})
+
+    for detection in detections:
+        oid = detection.get("object_id")
+        if oid != item.get("object_id") and detection.get("box_xywh_normalized"):
+            label = f"#{oid}" if oid in candidate_ids else ""
+            add(detection["box_xywh_normalized"], label)
+    seconds = item.get("best_source_seconds")
+    if seconds is not None:
+        for box in _frame_log_boxes(run_dir).get(round(float(seconds), 3), []):
+            add(box, "")
+    return others
+
+
+def _overlap(a: list[float], b: list[float]) -> float:
+    """Intersection over the smaller box, so nested boxes count as overlapping."""
+    smaller = min(a[2] * a[3], b[2] * b[3])
+    if smaller <= 0:
+        return 0.0
+    across = max(0.0, min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]))
+    down = max(0.0, min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]))
+    return across * down / smaller
+
 
 STUDIO_HTML = """<!doctype html>
 <html lang="en">
@@ -169,6 +241,9 @@ STUDIO_HTML = """<!doctype html>
     .frame-wrap { position: relative; min-width: 0; border-radius: 12px; overflow: hidden; background: var(--panel); }
     .frame-wrap img { display: block; width: 100%; height: auto; }
     .bbox { position: absolute; border: 2px solid var(--amber); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(14, 16, 18, 0.35); pointer-events: none; }
+    .bbox-other { position: absolute; border: 2px dashed rgba(236, 238, 240, 0.85); border-radius: 4px; pointer-events: none; }
+    .bbox-other span { position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; font-family: var(--mono); font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(14, 16, 18, 0.85); color: var(--text); white-space: nowrap; }
+    .size-main { font-family: var(--mono); font-size: 22px; color: var(--text); }
     .bbox-label { position: absolute; transform: translateY(-100%); margin-top: -6px; font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--amber); color: var(--amber-ink); white-space: nowrap; }
     .crop-wrap { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
     .crop { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; background-color: var(--panel); background-repeat: no-repeat; }
@@ -336,6 +411,7 @@ STUDIO_HTML = """<!doctype html>
               <img id="rvFrame" alt="Camera frame for the selected candidate">
               <div class="bbox" id="rvBox"></div>
               <span class="bbox-label" id="rvBoxLabel"></span>
+              <div id="rvOthers"></div>
             </div>
             <figcaption><span id="rvFrameCaption"></span><span id="rvFrameSize"></span></figcaption>
           </figure>
@@ -347,6 +423,7 @@ STUDIO_HTML = """<!doctype html>
       </div>
       <div class="decide">
         <div class="card" id="rvTriage"></div>
+        <div class="card" id="rvSize"></div>
         <div class="card">
           <span class="kicker">Camera GPS</span>
           <span class="mono" style="font-size:15px" id="rvGps"></span>
@@ -743,7 +820,7 @@ function queueRowHtml(item, idx) {
     '<span class="q-body">' +
     '<span class="q-top"><span>#' + esc(item.object_id) + ' · ' + Number(item.best_source_seconds).toFixed(2) + ' s</span><span class="score">' + (score === null ? 'n/a' : score.toFixed(3)) + '</span></span>' +
     '<span class="q-bar"><span style="width:' + Math.round((score || 0) * 100) + '%"></span></span>' +
-    '<span class="q-meta"><span class="sdot s-' + esc(status) + '"></span><span class="s-' + esc(status) + '">' + esc(status) + '</span><span class="vlm">· ' + esc(vlmLabel(item.vlm_triage)) + '</span></span>' +
+    '<span class="q-meta"><span class="sdot s-' + esc(status) + '"></span><span class="s-' + esc(status) + '">' + esc(status) + '</span><span class="vlm">· ' + esc(vlmLabel(item.vlm_triage)) + (sizeShort(item) ? ' · ' + esc(sizeShort(item)) : '') + '</span></span>' +
     '</span></button>';
 }
 
@@ -838,6 +915,33 @@ function renderTriage(item) {
     (t.uncertainty_note ? '<p class="quote muted" style="font-size:12px">Uncertainty: ' + esc(t.uncertainty_note) + '</p>' : '');
 }
 
+function sizeShort(item) {
+  const s = item.size_estimate;
+  return s && s.status === 'estimated' ? '≈' + s.length_cm + '×' + s.width_cm + ' cm' : '';
+}
+
+function span(bounds) {
+  return bounds[0] === bounds[1] ? String(bounds[0]) : bounds[0] + '–' + bounds[1];
+}
+
+function renderSize(item) {
+  const s = item.size_estimate;
+  const el = document.getElementById('rvSize');
+  if (!s) {
+    el.innerHTML = '<span class="kicker">Approx. size</span><span class="muted">Not estimated for this run. Run roadlens size on it.</span>';
+    return;
+  }
+  if (s.status !== 'estimated') {
+    el.innerHTML = '<span class="kicker">Approx. size</span><span class="verdict v-calm" style="font-size:18px">Not estimated</span><span class="muted">' + esc(s.reason || '') + '</span>';
+    return;
+  }
+  el.innerHTML =
+    '<div style="display:flex; justify-content:space-between"><span class="kicker">Approx. size · camera geometry</span><span class="mono muted">' + esc(s.frames_used) + (s.frames_used === 1 ? ' frame' : ' frames') + '</span></div>' +
+    '<span class="size-main">≈ ' + esc(s.length_cm) + ' × ' + esc(s.width_cm) + ' cm</span>' +
+    '<span class="mono muted" style="font-size:12px">length ' + esc(span(s.length_range_cm)) + ' cm · width ' + esc(span(s.width_range_cm)) + ' cm · nearest ' + esc(s.nearest_distance_m) + ' m</span>' +
+    '<span class="muted" style="font-size:12px">Road-surface footprint along × across the road, from a flat-road camera model. Not a survey measurement; depth is not estimated.</span>';
+}
+
 function paintEvidence() {
   const item = activeRun.ordered[reviewIndex];
   const img = document.getElementById('rvFrame');
@@ -853,6 +957,14 @@ function paintEvidence() {
     Object.assign(label.style, {left: x * 100 + '%', top: y * 100 + '%'});
     label.textContent = 'SAM 3.1 · ' + (item.score === null ? 'n/a' : Number(item.score).toFixed(3));
   }
+  // Other SAM detections in the same frame, so a frame with several hazards shows them all.
+  const others = evidenceView === 'box' ? (item.frame_detections || []) : [];
+  document.getElementById('rvOthers').innerHTML = others.map(o => {
+    const [x, y, w, h] = o.box.map(Number);
+    return '<div class="bbox-other" style="left:' + x * 100 + '%;top:' + y * 100 + '%;width:' + w * 100 + '%;height:' + h * 100 + '%">' + (o.label ? '<span>' + esc(o.label) + '</span>' : '') + '</div>';
+  }).join('');
+  const n = (item.frame_detections || []).length;
+  document.getElementById('rvFrameCaption').textContent = 'frame @ ' + Number(item.best_source_seconds).toFixed(2) + ' s · ' + item.prompt + (n ? ' · ' + n + ' more in frame (dashed)' : '');
   const crop = document.getElementById('rvCrop');
   const win = cropWindow(item, frameAspect());
   const cropUrl = item.frame_url || item.overlay_url;
@@ -885,6 +997,7 @@ function openReview(idx) {
   document.getElementById('rvGps').textContent = item.latitude === null ? 'unavailable' : Number(item.latitude).toFixed(5) + ', ' + Number(item.longitude).toFixed(5);
   document.getElementById('rvWhen').textContent = item.recorded_utc ? new Date(item.recorded_utc).toISOString().replace('T', ' · ').slice(0, 21) + ' UTC' : '';
   renderTriage(item);
+  renderSize(item);
   paintEvidence();
   renderQueue();
   const m = candidateMarkers.get(item.object_id);
@@ -1076,6 +1189,7 @@ class StudioState:
                 copy_item["review_status"] = decisions[str(oid)]
             fidx = int(copy_item.get("best_frame_index", oid))
             result_path = run_dir / f"result-{fidx:06d}.json"
+            detections = []
             if result_path.is_file():
                 detections = json.loads(result_path.read_text(encoding="utf-8")).get(
                     "detections", []
@@ -1083,6 +1197,12 @@ class StudioState:
                 copy_item["box_xywh_normalized"] = _detection_box_for_observation(
                     detections, copy_item.get("object_id")
                 )
+            copy_item["frame_detections"] = _other_frame_detections(
+                run_dir,
+                copy_item,
+                detections,
+                {o.get("object_id") for o in observations},
+            )
             ov_name = f"overlay-{fidx:06d}.png"
             fr_name = f"frame-{fidx:06d}.png"
             copy_item["overlay_url"] = (
@@ -1238,13 +1358,25 @@ def _execute_targeted_job(
                 for item in sub_obs:
                     new_id = len(merged_obs)
                     old_fidx = int(item["best_frame_index"])
-                    for prefix in ("overlay", "frame", "result"):
-                        ext = "json" if prefix == "result" else "png"
-                        src_file = pass_dir / f"{prefix}-{old_fidx:06d}.{ext}"
+                    for prefix in ("overlay", "frame"):
+                        src_file = pass_dir / f"{prefix}-{old_fidx:06d}.png"
                         if src_file.is_file():
-                            (job_dir / f"{prefix}-{new_id:06d}.{ext}").write_bytes(
+                            (job_dir / f"{prefix}-{new_id:06d}.png").write_bytes(
                                 src_file.read_bytes()
                             )
+                    # Keep only this candidate's detection, renumbered, so later
+                    # steps can match masks to merged observation ids.
+                    result_file = pass_dir / f"result-{old_fidx:06d}.json"
+                    if result_file.is_file():
+                        result = json.loads(result_file.read_text(encoding="utf-8"))
+                        dets = result.get("detections") or []
+                        own = [d for d in dets if d.get("object_id") == item["object_id"]]
+                        result["detections"] = [
+                            {**d, "object_id": new_id} for d in (own or dets[:1])
+                        ]
+                        (job_dir / f"result-{new_id:06d}.json").write_text(
+                            json.dumps(result, indent=2) + "\n", encoding="utf-8"
+                        )
                     from datetime import datetime
 
                     merged_obs.append(
@@ -1267,6 +1399,7 @@ def _execute_targeted_job(
 
         if len(passes) > 1:
             write_observations(merged_obs, Path(passes[0]["clip_path"]), job_dir)
+        annotate_run_sizes(job_dir)
 
         # Free SAM GPU tensors before launching local Muse Glimmer on single 24 GB GPU!
         gc.collect()

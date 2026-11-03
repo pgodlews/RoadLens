@@ -162,5 +162,37 @@
     ],
     "review_status": "all unreviewed",
     "meta_file_storage_after_run": "empty"
+  },
+  "hosted_sam_input_comparison": {
+    "window_source_seconds": [
+      584,
+      596
+    ],
+    "prompt": "pothole",
+    "runs": [
+      {
+        "input": "native 2688x2160, 29.97 fps",
+        "wall_seconds": 92.7,
+        "objects": 3,
+        "note": "both reported potholes plus a right-side feature near local candidate #3"
+      },
+      {
+        "input": "1280x1028, 29.97 fps",
+        "wall_seconds": 39.4,
+        "objects": 2,
+        "note": "both reported potholes"
+      },
+      {
+        "input": "native 2688x2160, 10 fps",
+        "wall_seconds": 42.3,
+        "objects": 2,
+        "note": "both reported potholes"
+      }
+    ],
+    "returned_confidence_range": [
+      0.7,
+      0.76
+    ],
+    "interpretation": "Every hosted object scored 0.70-0.76 and matched the local candidates scoring above 0.7, while the local scan keeps detections from 0.25-0.35 for human review. The API exposes no threshold, so its fixed cut-off (apparently near 0.7) explains most of the gap; full resolution and frame rate added one candidate."
   }
 }

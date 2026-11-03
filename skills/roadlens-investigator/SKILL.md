@@ -70,6 +70,6 @@ Example: *"I passed a large fallen tree branch on the street around 12:30, don't
    - **Never** submit reports automatically to local councils, highway authorities, or FixMyStreet. Always instruct the user to review and export confirmed GeoJSON via `roadlens studio --pmtiles <tiles.pmtiles>`.
 2. **Scientific & Positional Honesty:**
    - Always state that coordinates are Garmin camera GPS positions (`camera_gps`), not surveyed defect coordinates.
-   - Never invent physical width, depth, or severity measurements from monocular footage.
+   - Never invent physical width, depth, or severity measurements from monocular footage. You may quote a candidate's `size_estimate.display` as an approximate camera-geometry footprint; never present it as measured, never infer depth from it, and never claim it meets a council intervention threshold.
 3. **Single-GPU Sequential Execution:**
    - On a single 24 GB GPU (e.g. RTX 3090), never run `scan_segment_sam` (`LocalSamBackend`) and `LocalGlimmerBackend` (`llama-server`) concurrently. Run SAM first; `scan_segment_sam` releases CUDA cache before returning so VLM triage can safely load next.
