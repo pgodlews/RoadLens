@@ -420,3 +420,20 @@ gets a look every 1.6 m, enough to log hazards live. A motorway car gets
 about two looks at a pothole and moves 31 m during a hosted round trip,
 which might do for coarse logging but not for reacting; it would need
 several times the compute.
+
+### Frame-efficient sampling at stops and low speed
+
+The distance sampler still took a frame every 0.5 s at a standstill, and
+refined every native frame within ±2 s of each hit, so one candidate in view
+during a 60 s red light would have cost 1,897 SAM inferences. Local scans now
+treat the rider as stopped below 0.5 m/s (one frame on stopping, then one
+every 10 s), ignore GPS speed jitter, and refine from 10 m before to 15 m
+after each hit at 0.25 m spacing. On a simulated stop that is 107 frames
+instead of 1,897. On the Eccup survey the coarse pass is identical and
+refinement would need 12–17 % fewer frames for the same road. Every threshold
+is a flag,
+`--legacy-sampling` restores the old behaviour, and Studio and the MCP scan
+tool have the same switch
+([decision record](adaptive-sampling.md#decision-record--3-november-2026-stops-crawling-and-refinement-by-distance)).
+Hosted runs (`roadlens analyze --backend remote` and Studio's hosted mode)
+still send fixed 10 or 5 fps clips; making them speed-aware is a next step.

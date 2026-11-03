@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import time
 from contextlib import closing
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,7 +18,17 @@ from roadlens.analysis import Observation, nearest_telemetry, write_observations
 from roadlens.domain import Detection, FrameSegmentations, decode_mask
 from roadlens.media import probe_video
 from roadlens.output import write_frame_result
-from roadlens.sampling import refinement_windows, select_frames, speed_at_frames
+from roadlens.sampling import (
+    DEFAULT_MOTION,
+    LEGACY_MAX_INTERVAL,
+    LEGACY_MOTION,
+    MotionSettings,
+    distance_refinement_windows,
+    refinement_frames,
+    refinement_windows,
+    select_frames,
+    speed_at_frames,
+)
 from roadlens.scan_media import coverage, measure_frames, save_selected_frames
 from roadlens.sizing import annotate_run_sizes
 from roadlens.telemetry import read_garmin_telemetry
@@ -317,6 +327,29 @@ def _source_signature(video: Path) -> dict:
     }
 
 
+def sampling_settings(args) -> dict:
+    """Frame-efficiency settings, with defaults for callers that omit them."""
+    if getattr(args, "legacy_sampling", False):
+        return {
+            "max_interval": LEGACY_MAX_INTERVAL,
+            "motion": LEGACY_MOTION,
+            "refine_mode": "time",
+        }
+    default = DEFAULT_MOTION
+    stop_speed = getattr(args, "stop_speed", default.stop_speed_mps)
+    heartbeat = getattr(args, "stop_heartbeat", default.stop_heartbeat_seconds)
+    return {
+        "max_interval": getattr(args, "max_interval", None) or None,
+        "motion": MotionSettings(
+            stop_speed_mps=stop_speed or None,
+            resume_speed_mps=getattr(args, "resume_speed", default.resume_speed_mps),
+            stop_after_seconds=getattr(args, "stop_after", default.stop_after_seconds),
+            stop_heartbeat_seconds=heartbeat or None,
+        ),
+        "refine_mode": getattr(args, "refine_mode", "distance"),
+    }
+
+
 def run_scan(args, backend_factory=None):
     prompt = getattr(args, "prompt", "pothole")
     if not isinstance(prompt, str) or not prompt.strip():
@@ -383,14 +416,17 @@ def _run_scan(args, backend_factory=None):
     print("Measuring source-frame sharpness and presentation timestamps...", flush=True)
     times, quality = measure_frames(args.video, args.start, end)
     speeds = speed_at_frames(np.asarray(times), telemetry.samples, created)
+    sampling = sampling_settings(args)
+    motion = sampling["motion"]
     choices = select_frames(
         times,
         quality,
         speeds,
         spacing_m=args.spacing,
-        max_interval=args.max_interval,
+        max_interval=sampling["max_interval"],
         sharpness_window=args.sharpness_window,
         all_frames=args.sampling == "all",
+        motion=motion,
     )
     manifest = {
         "status": "preparing",
@@ -403,6 +439,11 @@ def _run_scan(args, backend_factory=None):
             if key not in ("checkpoint", "video", "output")
         },
         "coverage": coverage(choices, times),
+        "frame_efficiency": {
+            "max_interval_seconds": sampling["max_interval"],
+            "motion": asdict(motion),
+            "refine_mode": sampling["refine_mode"],
+        },
         "native_intervals_over_spacing": int(
             np.sum(
                 np.diff(times) * speeds[1:] > args.spacing,
@@ -506,21 +547,39 @@ def _run_scan(args, backend_factory=None):
         args.overlap_frames,
         prompt=prompt,
     )
-    windows = (
-        []
-        if args.no_refine or args.sampling == "all"
-        else refinement_windows(
+    by_distance = sampling["refine_mode"] == "distance"
+    if args.no_refine or args.sampling == "all":
+        windows = []
+    elif by_distance:
+        windows = distance_refinement_windows(
             positive,
+            times,
+            speeds,
             args.start,
             end,
-            args.refine_padding,
+            before_m=getattr(args, "refine_before", 10.0),
+            after_m=getattr(args, "refine_after", 15.0),
+            fallback_padding=args.refine_padding,
+            motion=motion,
         )
-    )
+    else:
+        windows = refinement_windows(positive, args.start, end, args.refine_padding)
     manifest["refinement_windows"] = windows
     save_manifest()
     native_choices = select_frames(times, quality, speeds, all_frames=True)
     for index, (lo, hi) in enumerate(windows):
-        fine = [c for c in native_choices if lo <= c.source_seconds <= hi]
+        fine = (
+            refinement_frames(
+                times,
+                quality,
+                speeds,
+                (lo, hi),
+                spacing_m=getattr(args, "refine_spacing", 0.25),
+                motion=motion,
+            )
+            if by_distance
+            else [c for c in native_choices if lo <= c.source_seconds <= hi]
+        )
         fine_paths = [
             args.output / f"fine-{index:03d}" / f"{i:06d}.png" for i in range(len(fine))
         ]

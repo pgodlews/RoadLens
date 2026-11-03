@@ -184,6 +184,8 @@ STUDIO_HTML = """<!doctype html>
     .pass-stats small { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
     .heading-pill { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 5px; background: var(--amber-wash); color: var(--amber); margin-left: 6px; }
     .engines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .toggle { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; color: var(--text-2); cursor: pointer; }
+    .toggle input { accent-color: var(--amber); width: 16px; height: 16px; margin: 0; }
     .warn { background: #2A2312; border: 1px solid #6E5227; color: #F2CF8D; padding: 10px 12px; border-radius: 9px; font-size: 12px; line-height: 1.45; }
     .guard { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--muted); line-height: 1.45; }
     .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -326,7 +328,7 @@ STUDIO_HTML = """<!doctype html>
         <div>
           <label class="field" for="samMode">Segment · SAM 3.1</label>
           <select id="samMode">
-            <option value="scan_local">Local · 1 m + 30 fps refine</option>
+            <option value="scan_local">Local · 1 m + refine</option>
             <option value="scan_coarse">Local · 1 m coarse only</option>
             <option value="analyze_remote">Meta API · hosted</option>
           </select>
@@ -340,6 +342,7 @@ STUDIO_HTML = """<!doctype html>
           </select>
         </div>
       </div>
+      <label class="toggle" title="Local scans: one frame on stopping instead of two a second, and refinement set in metres. Untick to reproduce the 1 November survey sampling."><input id="frameEfficient" type="checkbox" checked> Skip stops · frame-efficient sampling</label>
       <div id="remotePrivacyWarn" class="warn" style="display:none">
         Hosted SAM uploads the selected video window, burned-in GPS bar included, and deletes it once segmented. Remote triage sends evidence frames with the GPS bar masked.
       </div>
@@ -743,13 +746,14 @@ document.getElementById('runScanBtn').onclick = async () => {
   const prompt = document.getElementById('hazardPrompt').value.trim() || 'pothole';
   const sam_mode = document.getElementById('samMode').value;
   const vlm_mode = document.getElementById('vlmMode').value;
+  const frame_efficient = document.getElementById('frameEfficient').checked;
   document.getElementById('runScanBtn').disabled = true;
   document.getElementById('jobStatus').textContent = 'Starting targeted job...';
   setStep('Scan');
   try {
     const job = await api('/api/jobs', {
       method: 'POST',
-      body: JSON.stringify({passes: chosen, prompt, sam_mode, vlm_mode})
+      body: JSON.stringify({passes: chosen, prompt, sam_mode, vlm_mode, frame_efficient})
     });
     pollJob(job.job_id);
   } catch (err) {
@@ -1265,6 +1269,7 @@ def _execute_targeted_job(
     prompt: str,
     sam_mode: str,
     vlm_mode: str,
+    frame_efficient: bool = True,
 ) -> None:
     try:
         from roadlens.analysis import (
@@ -1335,7 +1340,8 @@ def _execute_targeted_job(
                     duration=dur_s,
                     sampling="distance",
                     spacing=1.0,
-                    max_interval=0.5,
+                    max_interval=None,
+                    legacy_sampling=not frame_efficient,
                     sharpness_window=0.05,
                     width=0,
                     chunk_frames=64,
@@ -1619,6 +1625,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 prompt = str(body.get("prompt") or "pothole").strip()
                 sam_mode = str(body.get("sam_mode") or "scan_local")
                 vlm_mode = str(body.get("vlm_mode") or "local")
+                frame_efficient = body.get("frame_efficient", True) is not False
                 job_id = uuid.uuid4().hex[:10]
                 self.state.jobs[job_id] = {
                     "job_id": job_id,
@@ -1628,7 +1635,15 @@ class StudioHandler(BaseHTTPRequestHandler):
                 }
                 worker = threading.Thread(
                     target=_execute_targeted_job,
-                    args=(self.state, job_id, passes, prompt, sam_mode, vlm_mode),
+                    args=(
+                        self.state,
+                        job_id,
+                        passes,
+                        prompt,
+                        sam_mode,
+                        vlm_mode,
+                        frame_efficient,
+                    ),
                     daemon=True,
                 )
                 worker.start()

@@ -359,8 +359,11 @@ def test_mcp_end_to_end_agentic_workflows(
     # 4. Targeted SAM scan (also ensures noisy stdout inside run_scan does not leak)
     scan_out = tmp_path / "sam-out"
 
+    scan_settings = []
+
     def _fake_run_scan(ns):
         print("NOISY SAM PROGRESS ON STDOUT")
+        scan_settings.append(ns)
         ns.output.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (160, 120), color=(80, 80, 80)).save(
             ns.output / "frame-000000.png"
@@ -422,6 +425,10 @@ def test_mcp_end_to_end_agentic_workflows(
     scan_data = scan_resp["result"]["structuredContent"]
     assert scan_data["unreviewed_candidate_count"] == 1
     assert scan_data["review_status"] == "unreviewed"
+    from roadlens.scan import sampling_settings
+
+    assert sampling_settings(scan_settings[0])["refine_mode"] == "distance"
+    assert sampling_settings(scan_settings[0])["max_interval"] is None
 
     # 5. VLM triage + summary report draft preserving unreviewed guardrail
     triage_resp = server.handle_jsonrpc(

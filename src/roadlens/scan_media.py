@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -105,5 +106,6 @@ def coverage(choices: list[FrameChoice], native_times: list[float]) -> dict:
         "integrated_known_distance_m": choices[-1].distance_m,
         "max_known_distance_gap_m": float(max(gaps, default=0)),
         "selected_frames_without_speed": sum(c.speed_mps is None for c in choices),
+        "selection_reasons": dict(Counter(c.reason for c in choices)),
         "note": "Integrated speed, not surveyed distance; excludes unknown speed.",
     }

@@ -7,7 +7,7 @@ import pytest
 from roadlens.cli import build_parser
 from roadlens.domain import Detection, FrameSegmentations
 from roadlens.sampling import FrameChoice
-from roadlens.scan import TrackRegistry, run_pass, run_scan
+from roadlens.scan import TrackRegistry, run_pass, run_scan, sampling_settings
 from roadlens.scan_media import measure_frames, save_selected_frames
 from roadlens.telemetry import TelemetryResult, TelemetrySample
 
@@ -95,6 +95,8 @@ def test_scan_audits_empty_frames_refines_and_exports_source_times(
     result = run_scan(args, Backend)
     assert result["status"] == "complete"
     assert result["refinement_windows"]
+    assert result["frame_efficiency"]["refine_mode"] == "distance"
+    assert result["coverage"]["selection_reasons"]["start"] == 1
     ledger = [
         json.loads(line) for line in (output / "frames.jsonl").read_text().splitlines()
     ]
@@ -246,3 +248,40 @@ def test_failure_manifest_does_not_claim_a_completed_scan(tmp_path):
         run_scan(args)
     manifest = json.loads((args.output / "scan.json").read_text())
     assert manifest["status"] == "failed"
+
+
+def test_frame_efficiency_flags_default_on_and_can_be_turned_off():
+    parser = build_parser()
+    base = ["scan", "clip.mp4", "--output", "out"]
+
+    default = sampling_settings(parser.parse_args(base))
+    assert default["max_interval"] is None
+    assert default["motion"].stop_speed_mps == 0.5
+    assert default["motion"].stop_heartbeat_seconds == 10.0
+    assert default["refine_mode"] == "distance"
+
+    legacy = sampling_settings(parser.parse_args([*base, "--legacy-sampling"]))
+    assert legacy["max_interval"] == 0.5
+    assert legacy["motion"].stop_speed_mps is None
+    assert legacy["refine_mode"] == "time"
+
+    piecemeal = sampling_settings(
+        parser.parse_args(
+            [*base, "--stop-speed", "0", "--stop-heartbeat", "0"]
+            + ["--refine-mode", "time", "--max-interval", "0.5"]
+        )
+    )
+    assert piecemeal["motion"].stop_speed_mps is None
+    assert piecemeal["motion"].stop_heartbeat_seconds is None
+    assert piecemeal["refine_mode"] == "time"
+    assert piecemeal["max_interval"] == 0.5
+
+
+def test_frame_efficiency_defaults_apply_to_callers_without_the_flags():
+    from argparse import Namespace
+
+    settings = sampling_settings(Namespace())
+    assert settings["motion"].stop_speed_mps == 0.5
+    assert settings["refine_mode"] == "distance"
+    assert sampling_settings(Namespace(legacy_sampling=True))["refine_mode"] == "time"
+

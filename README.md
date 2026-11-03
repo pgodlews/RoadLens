@@ -99,7 +99,7 @@ Open `http://127.0.0.1:8766`. You can also drag-and-drop a `.MP4` clip into the 
 
 ### 2. Distance-Sampled Local SAM 3.1 Scan (`roadlens scan`)
 
-Select a sharp nearby frame approximately every metre using integrated Garmin speed, retain native source resolution and presentation timestamps, and revisit `±2 s` around coarse candidates at full native frame rate:
+Select a sharp nearby frame approximately every metre using integrated Garmin speed, retain native source resolution and presentation timestamps, and revisit from 10 m before to 15 m after each coarse candidate at about one frame per 0.25 m (close to native frame rate when riding). Stops cost one frame, not two a second:
 
 ```bash
 uv run roadlens scan /path/to/GRMS0010.MP4 \
@@ -110,6 +110,7 @@ uv run roadlens scan /path/to/GRMS0010.MP4 \
 
 - `--prompt` accepts any text concept (default `pothole`, e.g. `"fallen tree branch"`, `"flooding"`).
 - `--no-refine` runs only the coarse `~1 m` pass; `--sampling all` compares against every native frame; `--plan-only` measures distance sampling without loading SAM; `--resume` replays completed chunks from `scan.json` / `frames.jsonl`.
+- Frame efficiency, all on by default and configurable: below `--stop-speed 0.5` m/s for `--stop-after 1` s the rider counts as stopped until `--resume-speed 1.0`, with one frame on stopping and one every `--stop-heartbeat 10` s; `--refine-mode distance` with `--refine-before 10`, `--refine-after 15` and `--refine-spacing 0.25` metres. Set `--stop-speed 0` or `--stop-heartbeat 0` to turn either part off, `--refine-mode time` for the old window of every native frame `--refine-padding` seconds either side, or `--legacy-sampling` to turn all of it off and reproduce the 1 November survey. Studio has the same switch ("Skip stops"), and the MCP scan tool takes `frame_efficient`.
 - One metre spacing and the default thresholds (`0.25` / `0.35`) are experimental settings, not validated optimal values; see [docs/adaptive-sampling.md](docs/adaptive-sampling.md).
 
 ### 3. VLM Candidate Triage & Draft Summary Report (`roadlens triage`)

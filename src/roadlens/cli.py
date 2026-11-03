@@ -66,7 +66,30 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument(
         "--spacing", type=float, default=1.0, help="Target metres per sample"
     )
-    scan.add_argument("--max-interval", type=float, default=0.5)
+    scan.add_argument(
+        "--max-interval",
+        type=float,
+        default=None,
+        help="Seconds; also sample at least this often while speed is known (off)",
+    )
+    scan.add_argument(
+        "--stop-speed",
+        type=float,
+        default=0.5,
+        help="m/s; slower than this for --stop-after counts as stopped (0: off)",
+    )
+    scan.add_argument(
+        "--resume-speed", type=float, default=1.0, help="m/s that ends a stop"
+    )
+    scan.add_argument(
+        "--stop-after", type=float, default=1.0, help="Seconds slow before a stop"
+    )
+    scan.add_argument(
+        "--stop-heartbeat",
+        type=float,
+        default=10.0,
+        help="Seconds between frames while stopped (0: none after the first)",
+    )
     scan.add_argument("--sharpness-window", type=float, default=0.05)
     scan.add_argument(
         "--width", type=int, default=0, help="0 preserves source resolution"
@@ -77,7 +100,31 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--confidence", type=float, default=0.25, help="Output filter")
     scan.add_argument("--detection-threshold", type=float, default=0.25)
     scan.add_argument("--new-object-threshold", type=float, default=0.35)
-    scan.add_argument("--refine-padding", type=float, default=2.0)
+    scan.add_argument(
+        "--refine-mode",
+        choices=("distance", "time"),
+        default="distance",
+        help="Refine metres around each hit, or every native frame +/- seconds",
+    )
+    scan.add_argument("--refine-before", type=float, default=10.0, help="Metres")
+    scan.add_argument("--refine-after", type=float, default=15.0, help="Metres")
+    scan.add_argument(
+        "--refine-spacing",
+        type=float,
+        default=0.25,
+        help="Metres between refinement frames",
+    )
+    scan.add_argument(
+        "--refine-padding",
+        type=float,
+        default=2.0,
+        help="Seconds; time mode, and distance mode where speed is unknown",
+    )
+    scan.add_argument(
+        "--legacy-sampling",
+        action="store_true",
+        help="Turn off stop handling and distance refinement (1 Nov survey)",
+    )
     scan.add_argument("--no-refine", action="store_true")
     scan.add_argument(
         "--resume", action="store_true", help="Reuse completed scan chunks"

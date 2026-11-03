@@ -41,7 +41,7 @@ Example: *"Find me potholes on Eccup Moor Road."*
 1. Call `index_ride_clips` on the Garmin clip or ride folder (automatically skips `.GLV` companion files and deduplicates overlapping saved event clips).
 2. Call `resolve_ride_segment` with `mode: "street"` and `value: "Eccup Moor Road"`.
    - Note whether the rider traversed the street once or multiple times (e.g. outbound and return passes) and check `estimated_coarse_frames_1m` before launching heavy scans.
-3. Call `scan_segment_sam` on each relevant pass with `prompt: "pothole"` (`refine: true` for best native-frame boundary evidence, or `refine: false` for a fast ~1 m coarse pass).
+3. Call `scan_segment_sam` on each relevant pass with `prompt: "pothole"` (`refine: true` for best native-frame boundary evidence, or `refine: false` for a fast ~1 m coarse pass). Leave `frame_efficient: true` (the default): stops cost one frame plus one every 10 s, and refinement covers 10 m before to 15 m after each hit. Set it to `false` only to reproduce the 1 November survey, or when Garmin speed looks wrong (for example near zero while the video shows the bike moving), since footage the speed marks as stopped is mostly skipped.
 4. Call `triage_run_candidates` (`vlm: "local"` or `"remote"`) to classify candidates into `hazard_candidate`, `sealed_repair`, `surface_debris_or_stain`, or `uncertain` using non-occluding raw frame + 1:1 close-up crops.
 5. Call `draft_summary_report` and direct the rider to confirm/reject candidates in `roadlens studio`.
 

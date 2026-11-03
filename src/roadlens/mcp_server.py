@@ -186,7 +186,8 @@ MCP_TOOLS: tuple[dict[str, Any], ...] = (
         "description": (
             "Run targeted SAM 3.1 distance-sampled video segmentation on a resolved "
             "clip window (`--prompt` e.g. 'pothole' or 'fallen tree branch'), "
-            "saving candidate overlays and unreviewed `observations.json`."
+            "saving candidate overlays and unreviewed `observations.json`. "
+            "Stops cost one frame unless `frame_efficient` is false."
         ),
         "inputSchema": {
             "type": "object",
@@ -197,6 +198,14 @@ MCP_TOOLS: tuple[dict[str, Any], ...] = (
                 "prompt": {"type": "string", "default": "pothole"},
                 "spacing_m": {"type": "number", "default": 1.0},
                 "refine": {"type": "boolean", "default": True},
+                "frame_efficient": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Take one frame on stopping instead of two a second, and "
+                        "refine by distance. False reproduces the 1 November survey."
+                    ),
+                },
                 "output_dir": {"type": "string"},
             },
             "required": ["clip_path", "start_seconds", "duration_seconds"],
@@ -484,6 +493,7 @@ class RoadLensMcpServer:
         prompt = str(args.get("prompt") or "pothole").strip()
         spacing_m = max(0.25, float(args.get("spacing_m", 1.0)))
         refine = bool(args.get("refine", True))
+        frame_efficient = bool(args.get("frame_efficient", True))
 
         out_dir = (
             Path(str(args["output_dir"])).expanduser().resolve()
@@ -500,7 +510,8 @@ class RoadLensMcpServer:
             duration=dur_s,
             sampling="distance",
             spacing=spacing_m,
-            max_interval=0.5,
+            max_interval=None,
+            legacy_sampling=not frame_efficient,
             sharpness_window=0.05,
             width=0,
             chunk_frames=64,

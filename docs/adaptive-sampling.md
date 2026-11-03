@@ -313,3 +313,55 @@ clarifies three practical trade-offs:
    unreviewed candidate tracks**, motivating user-scoped map/time segment
    selection, multimodal VLM patch triage, and bookended human review rather
    than unconditional full-ride scanning.
+
+## Decision record — 3 November 2026: stops, crawling and refinement by distance
+
+The 1 November sampler took a frame at least every `0.5 s` whatever the speed,
+and refined `±2 s` of every native frame around each coarse hit. Neither
+mattered on the Eccup corridor, where the rider never stopped, but both waste
+frames in town. Running the sampler on synthetic speed profiles at 29.97 fps:
+
+| Scenario | 1 November sampler | Frame-efficient sampler |
+|---|---:|---:|
+| Cruise at 6.7 m/s, 127 s (851 m) | 852 frames | 852 frames |
+| Cruise, brake, 60 s at traffic lights, pull away (425 m) | 558 (132 while stopped) | 433 (1 on stopping, 6 heartbeats) |
+| 60 s standstill with GPS speed jitter of 0–0.6 m/s | 140, and 18 m of phantom distance | 8, under 0.1 m |
+| Crawl at 1 m/s for 60 m | 181 | 61 |
+| Refinement when a candidate stays in view through the stop (each sampler end to end) | 1,897 native frames | 107 frames |
+
+- **Stopped state:** the rider counts as stopped once the current speed and
+  the mean over the last second are both below `0.5 m/s`, and stays stopped
+  until speed exceeds `1.0 m/s` or becomes unknown. Averaging stops one
+  jittery reading from cancelling a stop; requiring the current speed stops
+  pulling away from re-entering one. One frame is taken on stopping, then one
+  every `10 s` in case speed is wrong. Speed below the threshold adds no
+  distance.
+- **Time floor only without speed:** with known speed, distance alone decides,
+  so a crawl gets one frame per metre instead of two a second. Unknown speed
+  still falls back to a frame every `0.2 s`.
+- **Refinement by distance:** windows run from `10 m` before to `15 m` after
+  each hit, because a pothole is first detected 12–15 m ahead and the close
+  views that sizing needs come after the hit. Frames inside are chosen every
+  `0.25 m` with the same stop handling: close to every native frame when
+  riding, one frame at a standstill, and every native frame where speed is
+  unknown (falling back to `±2 s`). No window extends more than `30 s` from
+  its hit.
+
+Every threshold is a flag (`--stop-speed`, `--resume-speed`, `--stop-after`,
+`--stop-heartbeat`, `--max-interval`, `--refine-mode`, `--refine-before`,
+`--refine-after`, `--refine-spacing`), and `--legacy-sampling` restores the
+1 November behaviour exactly. The thresholds are reasoned defaults, not tuned
+on footage with real stops; the Eccup corridor has none.
+
+On the Eccup corridor survey, re-planned with the new defaults, the coarse
+pass is frame-for-frame identical (1,381 outbound, 1,318 return). Applying the
+new refinement to the recorded coarse hits and Garmin speed (SAM not re-run)
+covers about the same stretch of road with fewer frames:
+
+| Pass | 1 November refinement | Distance refinement |
+|---|---:|---:|
+| Outbound, 255 coarse hits | 102 s, 3,072 frames | 98 s, 2,563 frames (−17 %) |
+| Return, 335 coarse hits | 104 s, 3,118 frames | 97 s, 2,753 frames (−12 %) |
+
+Reconstructing the old method this way gives 3,072 and 3,118 frames against
+3,060 and 3,108 recorded, so the estimate is close.
