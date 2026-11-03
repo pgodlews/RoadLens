@@ -437,3 +437,32 @@ tool have the same switch
 ([decision record](adaptive-sampling.md#decision-record--3-november-2026-stops-crawling-and-refinement-by-distance)).
 Hosted runs (`roadlens analyze --backend remote` and Studio's hosted mode)
 still send fixed 10 or 5 fps clips; making them speed-aware is a next step.
+
+### Tesla dashcam as a second camera (local branch)
+
+Few riders own a Garmin Varia, but many drivers own a Tesla. Tesla firmware
+2025.44.25+ writes a protobuf SEI message into every video frame while the car
+is in gear (GPS about 9 times a second, speed, heading, gear), so the dashcam
+can stand in for Garmin telemetry. `roadlens/tesla.py` decodes it without
+protobuf tooling, and `read_camera_telemetry` picks Garmin or Tesla, so `scan`,
+`analyze` and `telemetry` accept either. Locations are labelled
+`tesla_camera_gps`, and sizes are reported unavailable until a Tesla camera
+is calibrated.
+
+Findings from the rider's archive (TeslaUSB on a Raspberry Pi, synced to a
+NAS):
+
+- SEI is written only in gear. Parked and Sentry clips (24 fps) never have
+  it; clips at about 36 fps mean the car is awake, driving or not.
+- All four recorded cameras (front, back, left and right repeater) carry
+  their own SEI, at 1280 × 960.
+- On one minute of a town drive, the front camera's best candidate scored
+  0.57 and most were lane markings or plain asphalt: it looks 10–30 m ahead
+  through the windscreen. The left repeater (0.72) and back camera (0.73)
+  showed clear potholes and broken patches at close range. The right
+  repeater found nothing: in the UK, potholes collect in the nearside gutter,
+  which the left repeater looks down onto.
+- Stop handling on the car's own speed: a minute of parking manoeuvres took
+  10 frames instead of 128.
+
+This footage includes the rider's home area and stays local.

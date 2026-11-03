@@ -24,6 +24,39 @@ class TelemetrySample:
 class TelemetryResult:
     samples: tuple[TelemetrySample, ...]
     rejected_samples: int
+    # Which camera's metadata the samples came from: "garmin" or "tesla_sei".
+    source: str = "garmin"
+
+    @property
+    def location_source(self) -> str:
+        """Label for observation positions: the camera's GPS, not the defect's."""
+        return {"garmin": "garmin_camera_gps", "tesla_sei": "tesla_camera_gps"}.get(
+            self.source, "camera_gps"
+        )
+
+
+def read_camera_telemetry(video_path: Path) -> TelemetryResult:
+    """Timed GPS from a Garmin Varia clip, or else from Tesla dashcam SEI.
+
+    Garmin clips carry ExifTool-readable timed GPS; Tesla clips carry per-frame
+    SEI messages. A clip with neither (for example a Tesla clip recorded while
+    parked) returns no samples, and positions are reported as unavailable.
+    """
+    try:
+        garmin = read_garmin_telemetry(video_path)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        garmin = TelemetryResult((), 0)
+    if garmin.samples:
+        return garmin
+    from roadlens.tesla import read_tesla_telemetry
+
+    try:
+        tesla = read_tesla_telemetry(video_path)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        tesla = TelemetryResult((), 0)
+    if tesla.samples:
+        return tesla
+    return TelemetryResult((), garmin.rejected_samples, source="none")
 
 
 def read_garmin_telemetry(video_path: Path) -> TelemetryResult:

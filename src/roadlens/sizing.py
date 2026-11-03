@@ -238,13 +238,32 @@ def observation_masks(run_dir: Path, observation: dict[str, Any]) -> list[np.nda
     return []
 
 
+def geometry_for(telemetry_source: str) -> CameraGeometry | None:
+    """Calibrated geometry for a camera, or None when none has been measured."""
+    return GARMIN_VARIA_VUE if telemetry_source == "garmin" else None
+
+
 def annotate_run_sizes(
-    run_dir: Path, geometry: CameraGeometry = GARMIN_VARIA_VUE
+    run_dir: Path, geometry: CameraGeometry | None = GARMIN_VARIA_VUE
 ) -> list[dict[str, Any]]:
-    """Add ``size_estimate`` to every observation (and its GeoJSON feature)."""
+    """Add ``size_estimate`` to every observation (and its GeoJSON feature).
+
+    With no ``geometry`` (an uncalibrated camera) every candidate is marked
+    unavailable rather than sized with another camera's numbers.
+    """
     path = run_dir / "observations.json"
     observations = json.loads(path.read_text())
     for item in observations:
+        if geometry is None:
+            item["size_estimate"] = {
+                "method": METHOD,
+                "status": "unavailable",
+                "reason": (
+                    "This camera has no measured height and focal length yet, "
+                    "so its masks cannot be projected onto the road."
+                ),
+            }
+            continue
         try:
             masks = observation_masks(run_dir, item)
         except (OSError, ValueError, KeyError) as error:

@@ -298,7 +298,7 @@ def test_scan_custom_prompt_propagates_to_observations_and_resume_check(
     )
     samples = (TelemetrySample(created, 53.85, -1.54, 5.0, 0.0),)
     monkeypatch.setattr(
-        "roadlens.scan.read_garmin_telemetry", lambda path: TelemetryResult(samples, 0)
+        "roadlens.scan.read_camera_telemetry", lambda path: TelemetryResult(samples, 0)
     )
     seen_prompts: list[str] = []
 

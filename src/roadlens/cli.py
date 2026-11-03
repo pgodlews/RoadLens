@@ -12,8 +12,8 @@ from roadlens.backends import create_backend
 from roadlens.media import prepare_analysis_clip, probe_video
 from roadlens.output import write_frame_result
 from roadlens.report import serve_report
-from roadlens.sizing import GARMIN_VARIA_VUE, annotate_run_sizes
-from roadlens.telemetry import read_garmin_telemetry
+from roadlens.sizing import GARMIN_VARIA_VUE, annotate_run_sizes, geometry_for
+from roadlens.telemetry import read_camera_telemetry
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -249,11 +249,11 @@ def main() -> None:
     elif args.command == "analyze":
         metadata = probe_video(args.video)
         if not metadata["creation_time"]:
-            raise ValueError("The Garmin video has no recording creation time")
+            raise ValueError("The video has no recording creation time")
         clip_created = datetime.fromisoformat(
             metadata["creation_time"].replace("Z", "+00:00")
         )
-        telemetry = read_garmin_telemetry(args.video)
+        telemetry = read_camera_telemetry(args.video)
         working_clip = args.output / "analysis.mp4"
         prepare_analysis_clip(
             args.video,
@@ -277,14 +277,20 @@ def main() -> None:
                 flush=True,
             )
         observations = build_observations(
-            frames, telemetry.samples, clip_created, args.start, args.fps
+            frames,
+            telemetry.samples,
+            clip_created,
+            args.start,
+            args.fps,
+            location_source=telemetry.location_source,
         )
         write_observations(observations, args.video, args.output)
-        annotate_run_sizes(args.output)
+        annotate_run_sizes(args.output, geometry_for(telemetry.source))
         print(f"Saved {len(observations)} unreviewed observation(s) to {args.output}")
     elif args.command == "telemetry":
-        result = read_garmin_telemetry(args.video)
+        result = read_camera_telemetry(args.video)
         payload = {
+            "source": result.source,
             "samples": [
                 {
                     "recorded_utc": sample.recorded_utc.isoformat(),

@@ -9,6 +9,7 @@ from roadlens.sizing import (
     annotate_run_sizes,
     estimate_size,
     fit_kinematic_geometry,
+    geometry_for,
     mask_footprint,
 )
 
@@ -111,3 +112,24 @@ def test_annotate_run_sizes_uses_every_stored_frame(tmp_path):
     assert saved[0]["size_estimate"]["length_cm"] == 60
     feature = json.loads((tmp_path / "observations.geojson").read_text())
     assert feature["features"][0]["properties"]["size_estimate"]["width_cm"] == 30
+
+
+def test_uncalibrated_camera_is_not_sized_with_garmin_numbers(tmp_path):
+    mask = ground_rectangle_mask(near_m=3.0, length_m=0.6, width_m=0.3)
+    detection = {
+        "object_id": 1,
+        "box_xywh_normalized": [0.4, 0.6, 0.2, 0.1],
+        "mask_rle": encode_mask(mask),
+    }
+    (tmp_path / "result-000000.json").write_text(
+        json.dumps({"frame_index": 0, "detections": [detection]})
+    )
+    (tmp_path / "observations.json").write_text(
+        json.dumps([{"object_id": 1, "best_frame_index": 0}])
+    )
+
+    annotated = annotate_run_sizes(tmp_path, geometry_for("tesla_sei"))
+
+    assert annotated[0]["size_estimate"]["status"] == "unavailable"
+    assert "measured height" in annotated[0]["size_estimate"]["reason"]
+    assert geometry_for("garmin") is not None

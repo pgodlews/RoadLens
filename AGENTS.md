@@ -25,6 +25,9 @@ uv run ruff check .
 - **Keep the rider's home out:** publish only footage and GPS from the Eccup
   corridor used in the docs; nothing from the start or end of a ride, and no
   near-home footage sent to hosted APIs.
+- **Tesla dashcam clips** live on the rider's NAS and carry GPS for every
+  drive, including home. Keep them and anything derived from them local
+  unless the rider approves a specific stretch.
 - **Never mark a candidate confirmed or rejected in code,** and never submit
   anything to a council or other service. Model output stays `unreviewed`.
 - **Delete hosted uploads** (`DELETE /v1/files/{id}`) once a request is done.

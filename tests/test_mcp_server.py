@@ -172,7 +172,7 @@ def mcp_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.setattr("roadlens.mcp_server.probe_video", lambda _p: meta)
     monkeypatch.setattr(
-        "roadlens.mcp_server.read_garmin_telemetry",
+        "roadlens.mcp_server.read_camera_telemetry",
         lambda _p: TelemetryResult(samples=samples, rejected_samples=0),
     )
     monkeypatch.setattr(

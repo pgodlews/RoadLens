@@ -47,7 +47,7 @@ from roadlens.ride import (
 )
 from roadlens.sampling import select_frames, speed_at_frames
 from roadlens.scan_media import measure_frames, save_selected_frames
-from roadlens.telemetry import read_garmin_telemetry
+from roadlens.telemetry import read_camera_telemetry
 from roadlens.vlm import (
     create_vlm_backend,
     format_deterministic_summary_report,
@@ -414,7 +414,7 @@ class RoadLensMcpServer:
             if meta.get("creation_time")
             else datetime.now(tz=UTC)
         )
-        telemetry = read_garmin_telemetry(clip_path)
+        telemetry = read_camera_telemetry(clip_path)
         times, sharpness = measure_frames(clip_path, start_s, end_s)
         speeds = speed_at_frames(np.asarray(times), telemetry.samples, created)
         choices = select_frames(

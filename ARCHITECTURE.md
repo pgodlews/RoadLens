@@ -9,7 +9,7 @@ organised; the [README](README.md) covers usage and results.
 
 ```mermaid
 flowchart LR
-    V["Garmin MP4<br/>video + timed GPS"] --> T["telemetry.py<br/>GPS fixes, speed"]
+    V["Garmin or Tesla MP4<br/>video + timed GPS"] --> T["telemetry.py / tesla.py<br/>GPS fixes, speed"]
     V --> M["scan_media.py<br/>source PTS, sharpness"]
     T --> S["sampling.py<br/>frame per metre,<br/>stops, refinement"]
     M --> S
@@ -76,7 +76,8 @@ runs offline on the rider's machine.
 | Module | Role |
 |---|---|
 | `cli.py` | `roadlens` commands: `scan`, `analyze`, `segment`, `triage`, `size`, `telemetry`, `report`, `studio`, `mcp` |
-| `telemetry.py` | Reads Garmin timed GPS (adapted from Ride Studio) |
+| `telemetry.py` | Reads Garmin timed GPS (adapted from Ride Studio); `read_camera_telemetry` picks Garmin or Tesla |
+| `tesla.py` | Decodes Tesla dashcam SEI (per-frame GPS, speed, heading) without protobuf tooling |
 | `media.py` | `ffprobe`/`ffmpeg` helpers: probe, fixed-fps clips, exact frame ranges |
 | `scan_media.py` | Decodes source PTS, measures road-region sharpness, saves selected frames |
 | `sampling.py` | Speed interpolation, distance sampling, stop handling, refinement windows |

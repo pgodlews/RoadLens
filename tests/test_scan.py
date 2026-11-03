@@ -55,7 +55,7 @@ def test_scan_audits_empty_frames_refines_and_exports_source_times(
         TelemetrySample(created + timedelta(seconds=t), 53, -1, 4, t) for t in range(4)
     )
     monkeypatch.setattr(
-        "roadlens.scan.read_garmin_telemetry", lambda path: TelemetryResult(samples, 0)
+        "roadlens.scan.read_camera_telemetry", lambda path: TelemetryResult(samples, 0)
     )
 
     class Backend:

@@ -52,6 +52,7 @@ def build_observations(
     clip_created_utc: datetime,
     clip_start_seconds: float,
     clip_fps: float,
+    location_source: str = "garmin_camera_gps",
 ) -> list[Observation]:
     if clip_fps <= 0:
         raise ValueError("clip_fps must be positive")
@@ -92,7 +93,7 @@ def build_observations(
                 latitude=None if nearest is None else nearest.latitude,
                 longitude=None if nearest is None else nearest.longitude,
                 location_source=(
-                    "garmin_camera_gps" if nearest is not None else "unavailable"
+                    location_source if nearest is not None else "unavailable"
                 ),
             )
         )

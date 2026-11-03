@@ -30,8 +30,8 @@ from roadlens.sampling import (
     speed_at_frames,
 )
 from roadlens.scan_media import coverage, measure_frames, save_selected_frames
-from roadlens.sizing import annotate_run_sizes
-from roadlens.telemetry import read_garmin_telemetry
+from roadlens.sizing import annotate_run_sizes, geometry_for
+from roadlens.telemetry import read_camera_telemetry
 
 
 def box_iou(a, b) -> float:
@@ -412,7 +412,7 @@ def _run_scan(args, backend_factory=None):
     end = min(args.start + args.duration, metadata["duration"])
     if args.start >= end:
         raise ValueError("Requested interval is outside the source video")
-    telemetry = read_garmin_telemetry(args.video)
+    telemetry = read_camera_telemetry(args.video)
     print("Measuring source-frame sharpness and presentation timestamps...", flush=True)
     times, quality = measure_frames(args.video, args.start, end)
     speeds = speed_at_frames(np.asarray(times), telemetry.samples, created)
@@ -450,6 +450,7 @@ def _run_scan(args, backend_factory=None):
             )
         ),
         "native_frames_without_speed": int(np.isnan(speeds).sum()),
+        "telemetry_source": telemetry.source,
         "coarse_frames": [c.to_dict() for c in choices],
         "timestamp_basis": "decoded PTS minus video stream start_time",
         "gps_time_basis": "MP4 creation_time + source PTS; camera positions only",
@@ -634,7 +635,7 @@ def _run_scan(args, backend_factory=None):
                 int(detection.mask.sum()),
                 gps.latitude if gps else None,
                 gps.longitude if gps else None,
-                "garmin_camera_gps" if gps else "unavailable",
+                telemetry.location_source if gps else "unavailable",
             )
         )
         details.append(
@@ -646,7 +647,7 @@ def _run_scan(args, backend_factory=None):
             }
         )
     write_observations(observations, args.video, args.output)
-    annotate_run_sizes(args.output)
+    annotate_run_sizes(args.output, geometry_for(telemetry.source))
     (args.output / "evidence-selection.json").write_text(json.dumps(details, indent=2))
     manifest.update(
         status="complete",
