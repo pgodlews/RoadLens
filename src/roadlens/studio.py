@@ -253,7 +253,7 @@ STUDIO_HTML = """<!doctype html>
           <select id="samMode">
             <option value="scan_local">Local · 1 m + 30 fps refine</option>
             <option value="scan_coarse">Local · 1 m coarse only</option>
-            <option value="analyze_remote">Remote Meta API</option>
+            <option value="analyze_remote">Meta API · hosted</option>
           </select>
         </div>
         <div>
@@ -261,12 +261,12 @@ STUDIO_HTML = """<!doctype html>
           <select id="vlmMode">
             <option value="local">Muse Glimmer (local)</option>
             <option value="none">Skip VLM (template)</option>
-            <option value="remote">Remote API VLM</option>
+            <option value="remote">Muse Spark · Meta API</option>
           </select>
         </div>
       </div>
       <div id="remotePrivacyWarn" class="warn" style="display:none">
-        Remote mode sends selected frames to the configured API endpoint. The burned-in Garmin GPS bar is masked on remote VLM calls.
+        Hosted SAM uploads the selected video window, burned-in GPS bar included, and deletes it once segmented. Remote triage sends evidence frames with the GPS bar masked.
       </div>
       <button id="runScanBtn" class="primary cta" disabled>
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M5 3 L15 9 L5 15 Z" fill="#1A1300"/></svg>

@@ -290,3 +290,29 @@ def test_draft_prompt_separates_human_review_from_model_triage():
     assert "human-confirmed / hazard_candidate" not in prompt
     assert "only a model opinion" in prompt
     assert '"confirmed": 1' in prompt and '"unreviewed": 1' in prompt
+
+
+def test_remote_vlm_reserves_reasoning_tokens(monkeypatch):
+    monkeypatch.delenv("ROADLENS_VLM_MODEL", raising=False)
+    monkeypatch.delenv("ROADLENS_VLM_REASONING_TOKENS", raising=False)
+    monkeypatch.setenv("ROADLENS_VLM_REASONING_EFFORT", "low")
+    payloads = []
+
+    def fake_transport(base_url, api_key, payload):
+        payloads.append(payload)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    remote = RemoteVlmBackend(api_key="test-key", transport=fake_transport)
+    assert remote.model_name == "muse-spark-1.3"
+    assert remote.chat_completion([], max_tokens=1200) == "ok"
+    assert payloads[0]["max_tokens"] == 9200
+    assert payloads[0]["reasoning_effort"] == "low"
+
+
+def test_remote_vlm_explains_exhausted_reasoning_budget():
+    def fake_transport(base_url, api_key, payload):
+        return {"choices": [{"finish_reason": "length", "message": {"content": None}}]}
+
+    remote = RemoteVlmBackend(api_key="test-key", transport=fake_transport)
+    with pytest.raises(RuntimeError, match="ROADLENS_VLM_REASONING_TOKENS"):
+        remote.chat_completion([])

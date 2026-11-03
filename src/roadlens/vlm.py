@@ -657,8 +657,14 @@ class RemoteVlmBackend(BaseVlmBackend):
             or "https://api.meta.ai/v1"
         )
         self.model_name = (
-            model or os.environ.get("ROADLENS_VLM_MODEL") or "Muse-Glimmer"
+            model or os.environ.get("ROADLENS_VLM_MODEL") or "muse-spark-1.3"
         )
+        # Muse Spark reasons before answering and counts those tokens against
+        # max_tokens (about 3.3k per triage call in live tests), so reserve room.
+        self.reasoning_tokens = int(
+            os.environ.get("ROADLENS_VLM_REASONING_TOKENS") or 8000
+        )
+        self.reasoning_effort = os.environ.get("ROADLENS_VLM_REASONING_EFFORT")
         self._transport = transport or _post_openai_chat
 
     def chat_completion(
@@ -671,9 +677,11 @@ class RemoteVlmBackend(BaseVlmBackend):
         payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": messages,
-            "max_tokens": max_tokens,
+            "max_tokens": max_tokens + self.reasoning_tokens,
             "temperature": 0.2,
         }
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
         if json_schema is not None:
             payload["response_format"] = {
                 "type": "json_schema",
@@ -688,6 +696,11 @@ class RemoteVlmBackend(BaseVlmBackend):
             raise RuntimeError("Remote VLM returned no completion choices")
         content = choices[0].get("message", {}).get("content")
         if not isinstance(content, str) or not content.strip():
+            if choices[0].get("finish_reason") == "length":
+                raise RuntimeError(
+                    "Remote VLM used its whole token budget before answering; "
+                    "raise ROADLENS_VLM_REASONING_TOKENS"
+                )
             raise RuntimeError("Remote VLM returned empty message content")
         return content
 

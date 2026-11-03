@@ -25,7 +25,7 @@ flowchart LR
 
 1. **Scope:** index a ride folder and pick a stretch by clicking two points on the map, by street name, by ride time ("20 minutes in") or by clock time ("around 12:30"). Street lookup runs offline from a local PMTiles archive. Choose a hazard preset (pothole, cracking, debris, flooding, fallen branch, sunken ironwork) or type your own.
 2. **Segment:** RoadLens integrates Garmin speed to pick one sharp frame about every metre, runs SAM 3.1 with a text prompt, then re-scans ±2 s around each hit at the native 30 fps. Every frame keeps its exact source timestamp and camera GPS fix.
-3. **Triage:** Muse Glimmer 30B (local, via llama.cpp) or a remote OpenAI-compatible VLM classifies each candidate as `hazard_candidate`, `sealed_repair`, `surface_debris_or_stain` or `uncertain`. It sees the raw frame plus an unmasked 1:1 crop, because a coloured SAM mask hid the asphalt texture and misled it.
+3. **Triage:** Muse Glimmer 30B (local, via llama.cpp) or Muse Spark 1.3 on the Meta Model API classifies each candidate as `hazard_candidate`, `sealed_repair`, `surface_debris_or_stain` or `uncertain`. It sees the raw frame plus an unmasked 1:1 crop, because a coloured SAM mask hid the asphalt texture and misled it.
 4. **Review:** in RoadLens Studio you step through candidates with the evidence, the model's verdict and the camera GPS, pressing **C** to confirm or **X** to reject. Model output never changes `review_status`; only you do.
 5. **Export:** only human-confirmed candidates go into the GeoJSON. Points are labelled as camera GPS positions, not surveyed defect locations. Nothing is submitted anywhere automatically.
 
@@ -46,6 +46,7 @@ All results come from real Garmin Varia Vue footage of a rural lane near Eccup, 
 - **Confidence alone is not enough:** a sealed asphalt patch scored 0.808, which is why RoadLens adds VLM triage and a human decision instead of raising thresholds.
 - **VLM triage:** pairing the raw frame with an unmasked crop took Glimmer from mislabelling a real pothole as "blue paint" to separating pothole, sealed repair and stain correctly on all three test candidates ([development log](docs/development-log.md), [earlier Glimmer evaluation](docs/glimmer-evaluation.md)).
 - **End-to-end Studio run (2 November):** a 25-second return-pass window gave 9 candidates in 6 minutes on one RTX 3090, including the known pothole at 0.828.
+- **Meta Model API (3 November):** hosted SAM 3.1 on a 12-second window of the same pass returned only the two rider-reported potholes (confidence 0.74 and 0.71) in 34 seconds; the local scan, with its lower threshold, had returned 8 candidates there. Muse Spark 1.3 triaged the 9 local candidates in 3 minutes, put both reported potholes in `hazard_candidate`, and agreed with local Glimmer on 7 of 9. A fully hosted Studio run scanned and triaged the whole 36-second pass in about 2 minutes, with no local GPU ([data](docs/evaluation/remote-api-eccup-2026-11-03.json)).
 
 These are qualitative results on one road. No recall or precision figure is claimed, and pothole sizes are not measured.
 
@@ -58,7 +59,7 @@ These are qualitative results on one road. No recall or precision figure is clai
 | Offline street lookup and multi-clip ride indexing | Run against the full UK PMTiles archive, no network calls |
 | RoadLens Studio, scope to confirmed export | Run end to end on real footage |
 | MCP server and investigator skill | Unit-tested; live street and ride-time lookup smoke-tested |
-| Remote Meta Model API (SAM 3.1 and VLM) | Implemented and unit-tested with mocked responses; live run pending API credits |
+| Meta Model API: hosted SAM 3.1 and Muse Spark 1.3 triage | Run live on real footage (3 November) |
 
 ## Requirements
 
@@ -66,7 +67,7 @@ These are qualitative results on one road. No recall or precision figure is clai
 - Local OpenStreetMap `.pmtiles` archive (Protomaps v3/v4 MVT vector tiles) for map display and offline street lookup.
 - Local SAM 3.1 backend: a CUDA GPU and `sam3.1_multiplex.pt`.
 - Optional local VLM backend: `llama-server` (`llama.cpp`) plus `Muse-Glimmer-30B` GGUF + multimodal projector (`ROADLENS_GLIMMER_GGUF`, `ROADLENS_GLIMMER_MMPROJ`). On a single 24 GB GPU, RoadLens runs SAM 3.1 and Muse Glimmer sequentially, releasing CUDA cache between stages.
-- Optional remote backends: `MODEL_API_KEY` (SAM remote API) and `ROADLENS_VLM_API_URL` / `ROADLENS_VLM_MODEL` / `ROADLENS_VLM_API_KEY` (OpenAI-compatible multimodal VLM).
+- Optional remote backends: `MODEL_API_KEY` for the Meta Model API (hosted `sam-3.1`, and `muse-spark-1.3` triage by default). `ROADLENS_VLM_API_URL` / `ROADLENS_VLM_MODEL` / `ROADLENS_VLM_API_KEY` point triage at any other OpenAI-compatible multimodal endpoint. Muse Glimmer itself is open-weights only and is not served by the Model API.
 
 ## Setup
 

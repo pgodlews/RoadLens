@@ -53,24 +53,32 @@ class RemoteSamBackend:
                 file=(video_path.name, video_path.read_bytes(), "video/mp4"),
                 purpose="user_data",
             )
-            stream = await client.responses.create(
-                model="sam-3.1",
-                stream=True,
-                input=[
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": [
-                            {"type": "input_text", "text": prompt},
-                            {"type": "input_video", "file_id": uploaded.id},
-                        ],
-                    }
-                ],
-            )
-            async with stream, aclosing(_stream_events(stream)) as events:
-                parsed = parse_responses_stream(events, video_segmentation_format())
-                async with parsed:
-                    return await parsed.final_result()
+            try:
+                stream = await client.responses.create(
+                    model="sam-3.1",
+                    stream=True,
+                    metadata={"include_confidence": "true"},
+                    input=[
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {"type": "input_video", "file_id": uploaded.id},
+                            ],
+                        }
+                    ],
+                )
+                async with stream, aclosing(_stream_events(stream)) as events:
+                    parsed = parse_responses_stream(
+                        events, video_segmentation_format()
+                    )
+                    async with parsed:
+                        return await parsed.final_result()
+            finally:
+                # Uploaded files never expire by default; keep ride footage off
+                # Meta's storage once segmentation is done.
+                await client.files.delete(uploaded.id)
 
     @staticmethod
     def _convert_result(
@@ -117,8 +125,9 @@ class RemoteSamBackend:
                 dtype=np.uint8,
                 count=mask_width * mask_height,
             ).reshape(mask_height, mask_width)
-            left = int(record.left)
-            top = int(record.top)
+            # The raster is box-local: it starts at the box's top-left corner.
+            left = int(record.bounds.left)
+            top = int(record.bounds.top)
             right = min(left + mask_width, width)
             bottom = min(top + mask_height, height)
             if left < 0 or top < 0 or right <= left or bottom <= top:
@@ -140,7 +149,7 @@ class RemoteSamBackend:
                 Detection(
                     object_id=int(record.object_id),
                     box_xywh=box,
-                    score=getattr(record, "score", None),
+                    score=record.confidence,
                     mask=mask,
                 )
             )

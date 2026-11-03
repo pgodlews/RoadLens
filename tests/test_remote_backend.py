@@ -1,5 +1,14 @@
 from types import SimpleNamespace
 
+from meta_sam_parser import (
+    FrameReference,
+    SegmentationBoxRecord,
+    SegmentationMask,
+    SegmentationMaskBounds,
+    SegmentationMaskIdentity,
+    SegmentationMaskRecord,
+)
+
 from roadlens.backends.remote import RemoteSamBackend
 
 
@@ -9,24 +18,22 @@ def test_convert_remote_result_places_cropped_mask(monkeypatch):
     monkeypatch.setattr(
         meta_sam_parser, "decode_mask_to_raster", lambda mask: iter([1, 0])
     )
-    frame = SimpleNamespace(frame_index=4)
-    box = SimpleNamespace(
-        kind="box",
-        frame=frame,
-        object_id="2",
-        left=1,
-        top=1,
-        right=3,
-        bottom=2,
+    # Real parser records, so the test breaks if the live record shape changes.
+    frame = FrameReference(frame_index=4)
+    box = SegmentationBoxRecord(
+        order=0, object_id="2", left=1, top=1, right=3, bottom=2, frame=frame
     )
-    mask = SimpleNamespace(
-        kind="mask",
-        frame=frame,
+    mask = SegmentationMaskRecord(
+        order=1,
         object_id="2",
-        left=1,
-        top=1,
-        mask=SimpleNamespace(width=2, height=1),
-        score=0.75,
+        identity=SegmentationMaskIdentity(
+            media="video", frame_index=4, object_id="2"
+        ),
+        revision=1,
+        mask=SegmentationMask(encoding="lossless", payload="~", width=2, height=1),
+        bounds=SegmentationMaskBounds(left=1, top=1, right=3, bottom=2),
+        frame=frame,
+        confidence=0.75,
     )
     result = SimpleNamespace(
         outcome=SimpleNamespace(status="completed"), diagnostics=[], records=[box, mask]

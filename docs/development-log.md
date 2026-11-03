@@ -42,7 +42,7 @@ These results verify the local inference path but **do not establish pothole det
 
 ### Hosted API status
 
-The remote backend uses `sam-3.1` and Meta's official streaming parser. Its result conversion is tested with mocked records. No live hosted request has been made; it awaits the user's hackathon API key and credits.
+The remote backend uses `sam-3.1` and Meta's official streaming parser. Its result conversion is tested with mocked records. No live hosted request has been made; it awaits the user's hackathon API key and credits. (Superseded: see 3 November.)
 
 ### End-to-end pipeline and map review
 
@@ -185,3 +185,53 @@ agent workflow. Each fix below has a regression test (53 tests pass with
 - **Smaller fixes:** narrow segment windows can no longer extend past the clip
   end, and `max_candidates` rejects negative values and treats `0` as "triage
   none".
+
+## 3 November 2026
+
+### First live Meta Model API run
+
+The hackathon API credits arrived, so both hosted paths were run against real
+Eccup footage for the first time ([data](evaluation/remote-api-eccup-2026-11-03.json)).
+The live run found two defects that the mocked tests could not.
+
+- **Model names:** the API lists `sam-3.1` and the `muse-spark` family. Muse
+  Glimmer is open-weights only, so the remote VLM default changed from the
+  guessed `Muse-Glimmer` to `muse-spark-1.3`.
+- **Reasoning budget:** Muse Spark reasons before answering and counts those
+  tokens against `max_tokens`. A triage call used about 3,300 reasoning tokens,
+  so the 1,200-token limit returned an empty answer. The remote backend now
+  reserves 8,000 extra tokens (`ROADLENS_VLM_REASONING_TOKENS`), can pass
+  `reasoning_effort`, and explains a budget exhausted before the answer.
+- **Hosted SAM mask records:** the real parser places masks through
+  `record.bounds` and reports `record.confidence`; the backend read
+  non-existent `left`/`top`/`score` attributes and crashed. The unit test now
+  builds the parser's real dataclasses, and fails on the old code.
+- **Confidence and storage:** requests now ask for per-object confidence
+  (`include_confidence`), and the uploaded clip is deleted from Meta's file
+  storage once segmentation finishes, since uploads never expire by default.
+
+Results, both on the 2 November return-pass window:
+
+- **Hosted SAM 3.1** (`roadlens analyze --backend remote`, 584–596 s at 10 fps)
+  returned exactly two objects in 34 seconds: the two rider-reported potholes at
+  586.6 s (confidence 0.74) and 594.6 s (0.71). Overlays show both masks on the
+  defects. The local scan of the same 12 seconds, with a lower threshold and
+  30 fps refinement, had returned 8 candidates.
+- **Muse Spark 1.3 triage** of the 9 local candidates took 3 minutes. Both
+  reported potholes were `hazard_candidate` (one at high confidence). Spark
+  agreed with local Glimmer on 7 of 9; the two disagreements (#4, #5) swap
+  `sealed_repair` and `hazard_candidate`, exactly the borderline cases left to
+  human review. Every `review_status` stayed `unreviewed`, and Spark's drafted
+  report kept human decisions and model opinions separate.
+- **Fully hosted Studio run:** with Segment set to "Meta API · hosted" and
+  Triage to Muse Spark, the whole 36-second return pass (564–600 s) was
+  scanned and triaged in about 2 minutes. It returned 3 candidates: the two
+  reported potholes and the open cavity at 600.4 s that the local scan also
+  found (#8), all triaged `hazard_candidate` and left `unreviewed`. Meta's file
+  storage was empty afterwards.
+- **JSON schema:** structured output is supported. Without it, Spark invented
+  its own field names and two triage fields came back empty.
+
+This is one window on one road, not a precision or recall measurement. At the
+published prices the run cost well under a dollar (about $0.02 per triage call
+and $0.20 per 1,000 SAM video frames).

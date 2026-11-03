@@ -1,0 +1,166 @@
+{
+  "date": "2026-11-03",
+  "footage": "Garmin Varia Vue GRMS0012.MP4, Eccup return pass, recorded 2026-10-11",
+  "api": {
+    "base_url": "https://api.meta.ai/v1",
+    "vlm_model": "muse-spark-1.3",
+    "sam_model": "sam-3.1"
+  },
+  "vlm_triage_comparison": {
+    "input": "9 candidates from the 2 Nov local Studio run (575-600 s window); raw frame + unmasked 1:1 crop, GPS banner masked for remote calls",
+    "wall_seconds_remote_9_candidates": 182,
+    "observed_reasoning_tokens_per_call": 3259,
+    "candidates": [
+      {
+        "object_id": 0,
+        "best_source_seconds": 586.59,
+        "sam_score_local": 0.828,
+        "note": "rider-reported pothole",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "medium",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 1,
+        "best_source_seconds": 588.59,
+        "sam_score_local": 0.363,
+        "note": "",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "medium",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 2,
+        "best_source_seconds": 586.09,
+        "sam_score_local": 0.35,
+        "note": "",
+        "glimmer_local": "surface_debris_or_stain",
+        "spark_remote": "surface_debris_or_stain",
+        "spark_confidence": "medium",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 3,
+        "best_source_seconds": 593.13,
+        "sam_score_local": 0.515,
+        "note": "",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "medium",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 4,
+        "best_source_seconds": 588.23,
+        "sam_score_local": 0.368,
+        "note": "",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "sealed_repair",
+        "spark_confidence": "medium",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 5,
+        "best_source_seconds": 588.59,
+        "sam_score_local": 0.36,
+        "note": "",
+        "glimmer_local": "sealed_repair",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "medium",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 6,
+        "best_source_seconds": 594.57,
+        "sam_score_local": 0.855,
+        "note": "rider-reported pothole (broken patch)",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "high",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 7,
+        "best_source_seconds": 593.87,
+        "sam_score_local": 0.36,
+        "note": "",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "high",
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 8,
+        "best_source_seconds": 599.97,
+        "sam_score_local": 0.723,
+        "note": "",
+        "glimmer_local": "hazard_candidate",
+        "spark_remote": "hazard_candidate",
+        "spark_confidence": "high",
+        "review_status": "unreviewed"
+      }
+    ]
+  },
+  "remote_sam_window": {
+    "window_source_seconds": [
+      584,
+      596
+    ],
+    "fps": 10,
+    "prompt": "pothole",
+    "wall_seconds": 34,
+    "local_candidates_in_same_window": 8,
+    "remote_observations": [
+      {
+        "object_id": 0,
+        "best_source_seconds": 586.6,
+        "first_source_seconds": 586.0,
+        "last_source_seconds": 586.6,
+        "confidence": 0.742,
+        "review_status": "unreviewed"
+      },
+      {
+        "object_id": 1,
+        "best_source_seconds": 594.6,
+        "first_source_seconds": 594.3,
+        "last_source_seconds": 594.7,
+        "confidence": 0.714,
+        "review_status": "unreviewed"
+      }
+    ]
+  },
+  "caveats": "One window on one road; not a recall or precision measurement. The local scan used a lower SAM threshold and 30 fps refinement, so candidate counts are not directly comparable.",
+  "hosted_studio_run": {
+    "sam_mode": "analyze_remote",
+    "vlm_mode": "remote (muse-spark-1.3)",
+    "window_source_seconds": [
+      564,
+      600.6
+    ],
+    "wall_seconds": 122,
+    "candidates": [
+      {
+        "best_source_seconds": 586.4,
+        "confidence": 0.762,
+        "spark": "hazard_candidate",
+        "note": "rider-reported pothole"
+      },
+      {
+        "best_source_seconds": 594.6,
+        "confidence": 0.706,
+        "spark": "hazard_candidate",
+        "note": "rider-reported pothole (broken patch)"
+      },
+      {
+        "best_source_seconds": 600.4,
+        "confidence": 0.704,
+        "spark": "hazard_candidate",
+        "note": "also local candidate #8"
+      }
+    ],
+    "review_status": "all unreviewed",
+    "meta_file_storage_after_run": "empty"
+  }
+}
