@@ -1,0 +1,514 @@
+{
+ "date": "2026-11-03",
+ "footage": "Garmin Varia Vue, Eccup corridor, recorded 2026-10-11",
+ "api": {
+  "base_url": "https://api.meta.ai/v1",
+  "sam_model": "sam-3.1"
+ },
+ "settings": {
+  "fps": 10,
+  "width_px": 1280
+ },
+ "windows": {
+  "outbound": {
+   "clip": "GRMS0010.MP4",
+   "source_seconds": [
+    150,
+    360
+   ]
+  },
+  "return": {
+   "clip": "GRMS0012.MP4",
+   "source_seconds": [
+    420,
+    600.6
+   ]
+  }
+ },
+ "review_note": "Visual checks by the developer from frames; nothing here is a confirmed defect.",
+ "other_hazard_prompts": [
+  {
+   "prompt": "manhole cover",
+   "candidates": {
+    "outbound": 1,
+    "return": 12
+   },
+   "visual_check": "No hit shows a manhole cover. All hits were potholes, patches or a dark stain; one outbound hit masked a large resurfaced strip."
+  },
+  {
+   "prompt": "drain grate",
+   "candidates": {
+    "outbound": 1,
+    "return": 3
+   },
+   "visual_check": "No hit shows a drain grate. Hits were potholes or patches, including the large return-pass pothole at 600.5 s."
+  },
+  {
+   "prompt": "standing water",
+   "candidates": {
+    "outbound": 0,
+    "return": 0
+   },
+   "visual_check": "No hits. The ride was on a dry day, so none were expected, but recall for this prompt is untested."
+  },
+  {
+   "prompt": "road debris",
+   "candidates": {
+    "outbound": 0,
+    "return": 0
+   },
+   "visual_check": "No hits; recall for this prompt is untested, as no debris was seen while reviewing other candidates."
+  },
+  {
+   "prompt": "cracked asphalt",
+   "candidates": {
+    "outbound": 2,
+    "return": 1
+   },
+   "visual_check": "Masked the whole road surface for the entire window; too diffuse a concept to give discrete candidates."
+  }
+ ],
+ "hosted_object_cap": {
+  "finding": "A hosted session stops adding objects after 16. The 180 s return window (single session) produced 16 tracked ids, the last appearing at 488.7 s, then nothing new for 112 s; the same last 100 s sent alone gave 7 candidates, including the rider-reported pothole at 586.6 s.",
+  "single_session": {
+   "return": 16,
+   "outbound": 13
+  },
+  "last_100_s_alone": [
+   {
+    "object_id": 0,
+    "first_source_seconds": 507.1,
+    "last_source_seconds": 507.7,
+    "best_source_seconds": 507.6,
+    "confidence": 0.75,
+    "size_estimate": "≈ 170 × 80 cm (length 135–215, width 75–90 cm)",
+    "review_status": "unreviewed"
+   },
+   {
+    "object_id": 1,
+    "first_source_seconds": 535.2,
+    "last_source_seconds": 535.4,
+    "best_source_seconds": 535.4,
+    "confidence": 0.797,
+    "size_estimate": "≈ 30 × 30 cm (length 25–35, width 30–35 cm)",
+    "review_status": "unreviewed"
+   },
+   {
+    "object_id": 2,
+    "first_source_seconds": 556.5,
+    "last_source_seconds": 556.8,
+    "best_source_seconds": 556.8,
+    "confidence": 0.73,
+    "size_estimate": "≈ 30 × 20 cm (length 25–40, width 15–20 cm)",
+    "review_status": "unreviewed"
+   },
+   {
+    "object_id": 3,
+    "first_source_seconds": 556.5,
+    "last_source_seconds": 557.1,
+    "best_source_seconds": 557.1,
+    "confidence": 0.766,
+    "size_estimate": "≈ 100 × 45 cm (length 80–125, width 40–50 cm)",
+    "review_status": "unreviewed"
+   },
+   {
+    "object_id": 4,
+    "first_source_seconds": 586.0,
+    "last_source_seconds": 586.6,
+    "best_source_seconds": 586.6,
+    "confidence": 0.746,
+    "size_estimate": "≈ 65 × 15 cm (length 50–80, width 15 cm)",
+    "review_status": "unreviewed"
+   },
+   {
+    "object_id": 5,
+    "first_source_seconds": 594.3,
+    "last_source_seconds": 594.7,
+    "best_source_seconds": 594.6,
+    "confidence": 0.706,
+    "size_estimate": "≈ 165 × 50 cm (length 135–205, width 50–55 cm)",
+    "review_status": "unreviewed"
+   },
+   {
+    "object_id": 6,
+    "first_source_seconds": 598.5,
+    "last_source_seconds": 600.5,
+    "best_source_seconds": 600.5,
+    "confidence": 0.734,
+    "size_estimate": "≈ 155 × 60 cm (length 115–225, width 55–65 cm)",
+    "review_status": "unreviewed"
+   }
+  ],
+  "fix": "Clips longer than 200 frames are sent as overlapping chunks (5 shared frames) and tracks are re-linked by mask IoU >= 0.3 in the shared frames.",
+  "chunked": {
+   "return": [
+    {
+     "object_id": 0,
+     "first_source_seconds": 443.2,
+     "last_source_seconds": 443.7,
+     "best_source_seconds": 443.7,
+     "confidence": 0.734,
+     "size_estimate": "≈ 45 × 20 cm (length 35–55, width 20–25 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 1,
+     "first_source_seconds": 443.9,
+     "last_source_seconds": 444.3,
+     "best_source_seconds": 444.2,
+     "confidence": 0.754,
+     "size_estimate": "≈ 110 × 35 cm (length 85–135, width 30–35 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 3,
+     "first_source_seconds": 444.2,
+     "last_source_seconds": 444.7,
+     "best_source_seconds": 444.7,
+     "confidence": 0.758,
+     "size_estimate": "≈ 50 × 20 cm (length 40–60, width 15–20 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 2,
+     "first_source_seconds": 444.2,
+     "last_source_seconds": 445.0,
+     "best_source_seconds": 444.9,
+     "confidence": 0.719,
+     "size_estimate": "≈ 65 × 35 cm (length 50–85, width 35–40 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 4,
+     "first_source_seconds": 444.9,
+     "last_source_seconds": 445.3,
+     "best_source_seconds": 445.2,
+     "confidence": 0.704,
+     "size_estimate": "≈ 25 × 25 cm (length 20–30, width 20–25 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 5,
+     "first_source_seconds": 447.5,
+     "last_source_seconds": 448.1,
+     "best_source_seconds": 447.9,
+     "confidence": 0.766,
+     "size_estimate": "≈ 190 × 105 cm (length 150–240, width 100–115 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 6,
+     "first_source_seconds": 447.6,
+     "last_source_seconds": 447.7,
+     "best_source_seconds": 447.6,
+     "confidence": 0.766,
+     "size_estimate": "≈ 35 × 20 cm (length 25–40, width 20–25 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 7,
+     "first_source_seconds": 449.5,
+     "last_source_seconds": 450.1,
+     "best_source_seconds": 449.6,
+     "confidence": 0.75,
+     "size_estimate": "≈ 40 × 25 cm (length 30–50, width 25–30 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 8,
+     "first_source_seconds": 461.2,
+     "last_source_seconds": 461.3,
+     "best_source_seconds": 461.2,
+     "confidence": 0.734,
+     "size_estimate": "≈ 20 × 20 cm (length 15–25, width 20 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 9,
+     "first_source_seconds": 461.5,
+     "last_source_seconds": 461.9,
+     "best_source_seconds": 461.9,
+     "confidence": 0.719,
+     "size_estimate": "≈ 80 × 25 cm (length 60–105, width 25–30 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 10,
+     "first_source_seconds": 461.6,
+     "last_source_seconds": 461.6,
+     "best_source_seconds": 461.6,
+     "confidence": 0.719,
+     "size_estimate": null,
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 11,
+     "first_source_seconds": 461.9,
+     "last_source_seconds": 461.9,
+     "best_source_seconds": 461.9,
+     "confidence": 0.71,
+     "size_estimate": "≈ 35 × 20 cm (length 25–40, width 20–25 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 12,
+     "first_source_seconds": 474.4,
+     "last_source_seconds": 475.6,
+     "best_source_seconds": 474.7,
+     "confidence": 0.785,
+     "size_estimate": "≈ 260 × 50 cm (length 195–330, width 45–55 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 13,
+     "first_source_seconds": 476.3,
+     "last_source_seconds": 477.6,
+     "best_source_seconds": 477.5,
+     "confidence": 0.714,
+     "size_estimate": "≈ 175 × 70 cm (length 130–225, width 60–80 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 14,
+     "first_source_seconds": 482.6,
+     "last_source_seconds": 484.1,
+     "best_source_seconds": 483.9,
+     "confidence": 0.714,
+     "size_estimate": "≈ 190 × 65 cm (length 135–250, width 55–80 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 15,
+     "first_source_seconds": 482.7,
+     "last_source_seconds": 483.1,
+     "best_source_seconds": 483.0,
+     "confidence": 0.704,
+     "size_estimate": "≈ 125 × 55 cm (length 100–160, width 50–60 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 16,
+     "first_source_seconds": 488.9,
+     "last_source_seconds": 489.5,
+     "best_source_seconds": 489.4,
+     "confidence": 0.73,
+     "size_estimate": "≈ 155 × 40 cm (length 115–205, width 40–45 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 17,
+     "first_source_seconds": 489.2,
+     "last_source_seconds": 489.4,
+     "best_source_seconds": 489.4,
+     "confidence": 0.723,
+     "size_estimate": "≈ 50 × 15 cm (length 35–60, width 15–20 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 18,
+     "first_source_seconds": 507.1,
+     "last_source_seconds": 507.7,
+     "best_source_seconds": 507.6,
+     "confidence": 0.706,
+     "size_estimate": "≈ 170 × 80 cm (length 135–215, width 75–90 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 19,
+     "first_source_seconds": 535.2,
+     "last_source_seconds": 535.4,
+     "best_source_seconds": 535.4,
+     "confidence": 0.805,
+     "size_estimate": "≈ 30 × 30 cm (length 25–35, width 30–35 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 20,
+     "first_source_seconds": 556.3,
+     "last_source_seconds": 557.1,
+     "best_source_seconds": 557.1,
+     "confidence": 0.71,
+     "size_estimate": "≈ 95 × 45 cm (length 75–125, width 40–45 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 21,
+     "first_source_seconds": 556.5,
+     "last_source_seconds": 556.8,
+     "best_source_seconds": 556.8,
+     "confidence": 0.746,
+     "size_estimate": "≈ 30 × 15 cm (length 25–40, width 15–20 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 22,
+     "first_source_seconds": 585.9,
+     "last_source_seconds": 586.6,
+     "best_source_seconds": 586.6,
+     "confidence": 0.71,
+     "size_estimate": "≈ 65 × 15 cm (length 50–85, width 15 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 23,
+     "first_source_seconds": 593.8,
+     "last_source_seconds": 594.7,
+     "best_source_seconds": 594.6,
+     "confidence": 0.706,
+     "size_estimate": "≈ 170 × 50 cm (length 135–230, width 45–60 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 24,
+     "first_source_seconds": 598.5,
+     "last_source_seconds": 600.5,
+     "best_source_seconds": 600.5,
+     "confidence": 0.706,
+     "size_estimate": "≈ 190 × 65 cm (length 160–230, width 55–70 cm)",
+     "review_status": "unreviewed"
+    }
+   ],
+   "outbound": [
+    {
+     "object_id": 0,
+     "first_source_seconds": 159.9,
+     "last_source_seconds": 160.3,
+     "best_source_seconds": 160.2,
+     "confidence": 0.813,
+     "size_estimate": "≈ 65 × 25 cm (length 55–80, width 25–30 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 1,
+     "first_source_seconds": 215.3,
+     "last_source_seconds": 216.1,
+     "best_source_seconds": 215.9,
+     "confidence": 0.71,
+     "size_estimate": "≈ 70 × 35 cm (length 55–85, width 35–40 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 2,
+     "first_source_seconds": 218.9,
+     "last_source_seconds": 219.1,
+     "best_source_seconds": 219.0,
+     "confidence": 0.719,
+     "size_estimate": "≈ 35 × 20 cm (length 25–40, width 15–20 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 3,
+     "first_source_seconds": 237.4,
+     "last_source_seconds": 237.6,
+     "best_source_seconds": 237.6,
+     "confidence": 0.742,
+     "size_estimate": "≈ 30 × 15 cm (length 25–35, width 15–20 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 4,
+     "first_source_seconds": 257.3,
+     "last_source_seconds": 257.9,
+     "best_source_seconds": 257.8,
+     "confidence": 0.758,
+     "size_estimate": "≈ 135 × 45 cm (length 105–165, width 45–55 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 5,
+     "first_source_seconds": 284.6,
+     "last_source_seconds": 285.0,
+     "best_source_seconds": 284.9,
+     "confidence": 0.77,
+     "size_estimate": "≈ 45 × 15 cm (length 35–55, width 15 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 6,
+     "first_source_seconds": 284.6,
+     "last_source_seconds": 285.0,
+     "best_source_seconds": 285.0,
+     "confidence": 0.714,
+     "size_estimate": "≈ 35 × 10 cm (length 30–45, width 10 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 7,
+     "first_source_seconds": 296.5,
+     "last_source_seconds": 297.3,
+     "best_source_seconds": 297.2,
+     "confidence": 0.754,
+     "size_estimate": "≈ 80 × 30 cm (length 65–105, width 30–35 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 8,
+     "first_source_seconds": 296.6,
+     "last_source_seconds": 297.7,
+     "best_source_seconds": 297.4,
+     "confidence": 0.706,
+     "size_estimate": "≈ 135 × 55 cm (length 110–175, width 50–60 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 9,
+     "first_source_seconds": 298.6,
+     "last_source_seconds": 299.5,
+     "best_source_seconds": 299.3,
+     "confidence": 0.739,
+     "size_estimate": "≈ 145 × 60 cm (length 110–190, width 55–70 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 10,
+     "first_source_seconds": 298.6,
+     "last_source_seconds": 299.4,
+     "best_source_seconds": 299.3,
+     "confidence": 0.77,
+     "size_estimate": "≈ 135 × 30 cm (length 105–175, width 30–35 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 12,
+     "first_source_seconds": 334.0,
+     "last_source_seconds": 334.3,
+     "best_source_seconds": 334.3,
+     "confidence": 0.746,
+     "size_estimate": "≈ 45 × 25 cm (length 35–55, width 20–25 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 11,
+     "first_source_seconds": 334.0,
+     "last_source_seconds": 335.0,
+     "best_source_seconds": 334.9,
+     "confidence": 0.71,
+     "size_estimate": "≈ 75 × 20 cm (length 55–90, width 20–25 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 13,
+     "first_source_seconds": 334.2,
+     "last_source_seconds": 334.5,
+     "best_source_seconds": 334.5,
+     "confidence": 0.746,
+     "size_estimate": "≈ 35 × 15 cm (length 25–40, width 15 cm)",
+     "review_status": "unreviewed"
+    },
+    {
+     "object_id": 14,
+     "first_source_seconds": 335.1,
+     "last_source_seconds": 335.4,
+     "best_source_seconds": 335.4,
+     "confidence": 0.704,
+     "size_estimate": "≈ 35 × 20 cm (length 30–45, width 15–20 cm)",
+     "review_status": "unreviewed"
+    }
+   ]
+  },
+  "chunked_vs_single": {
+   "return": "25 vs 16; every single-session candidate is also found chunked; 9 new, including 586.6 s",
+   "outbound": "15 vs 13; one single-session track (298.6-332.9 s) is replaced by shorter tracks"
+  }
+ }
+}

@@ -76,6 +76,39 @@ def prepare_analysis_clip(
     )
 
 
+def cut_frame_range(
+    video_path: Path, output_path: Path, start_frame: int, frame_count: int
+) -> None:
+    """Re-encode frames ``[start_frame, start_frame + frame_count)`` exactly."""
+    if start_frame < 0 or frame_count <= 0:
+        raise ValueError("Frame range must start at 0 or later and be non-empty")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    end_frame = start_frame + frame_count
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(video_path),
+            "-vf",
+            f"trim=start_frame={start_frame}:end_frame={end_frame},"
+            "setpts=PTS-STARTPTS",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "18",
+            "-y",
+            str(output_path),
+        ],
+        check=True,
+    )
+
+
 def extract_frame(video_path: Path, frame_index: int, output_path: Path) -> None:
     if frame_index < 0:
         raise ValueError("frame_index cannot be negative")

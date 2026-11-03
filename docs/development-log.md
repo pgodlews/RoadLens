@@ -291,3 +291,57 @@ candidate number for hosted runs, which store every detection per frame, and
 taken from the frame log for local scans. Duplicates, specks and frame-filling
 merged masks are skipped. Studio's multi-pass merge also renumbers each copied
 detection so masks stay matched to merged candidates.
+
+### Hosted SAM stops adding objects after 16
+
+A sweep of the Eccup corridor with hosted SAM 3.1 (10 fps, 1280 px)
+exposed a limit. One 180-second session over the return pass produced 16
+tracked objects, the last appearing at 488.7 s, then nothing new for the
+remaining 112 s. The last 100 s, sent alone, gave 7 candidates there,
+including the rider-reported pothole at 586.6 s.
+
+Clips longer than 200 frames now go up as overlapping chunks, three at a
+time. Each chunk shares 5 frames with the next, and a track keeps its id
+across a boundary when its masks overlap (IoU ≥ 0.3) in the shared frames. A
+warning is printed if a chunk still reaches 16 objects
+(`ROADLENS_REMOTE_CHUNK_FRAMES` sets the chunk length).
+
+| Window | One session | Chunked |
+|---|---|---|
+| Return pass, 420–600.6 s | 16 | 25, including 586.6 s |
+| Outbound pass, 150–360 s | 13 | 15 |
+
+Every single-session candidate is also found chunked, except one outbound
+object tracked for 34 s, which chunking replaces with shorter tracks. Size
+estimates of candidates found both ways differ by at most 15 cm, on the
+larger patches.
+All candidates remain unreviewed
+([data](evaluation/hazard-sweep-eccup-2026-11-03.json)).
+
+### Other static hazards on the same corridor
+
+RoadLens takes any text prompt, but this footage has no clear example of a
+static hazard other than potholes. Five other prompts were run over both
+corridor windows to see what the model does when the target is rare or
+absent. All hits were checked by eye from the frames.
+
+| Prompt | Hits (out / back) | What the hits were |
+|---|---|---|
+| manhole cover | 1 / 12 | Potholes, patches and a dark stain; no manhole cover in any hit |
+| drain grate | 1 / 3 | Potholes and patches; no drain grate in any hit |
+| standing water | 0 / 0 | Nothing (dry day) |
+| road debris | 0 / 0 | Nothing |
+| cracked asphalt | 2 / 1 | The whole road surface |
+
+- **Absent concepts stay quiet:** standing water and road debris returned
+  nothing, so they do not invent hazards on a clean, dry lane. Their recall is
+  untested, because there is no footage of either.
+- **Look-alike concepts land on potholes:** with no manhole or grate in view,
+  the closest-looking round dark depressions pass the hosted cut-off. The
+  candidates are real surface defects under the wrong name, which is why each
+  one goes to triage and a person instead of being trusted by label.
+- **Diffuse concepts are not candidates:** "cracked asphalt" segments the
+  whole carriageway. Area-type defects need a different output, such as the
+  share of each frame affected, rather than one tracked object.
+
+Showing another hazard class properly needs footage that contains one.
