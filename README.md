@@ -1,6 +1,8 @@
 # RoadLens
 
-![RoadLens: Ride it. Review it. Report it.](docs/samples/roadlens-hero.jpg)
+[![RoadLens: Ride it. Review it. Report it.](docs/samples/roadlens-hero.jpg)](https://youtu.be/pbrpS-YJFnw)
+
+▶ **[Watch the 3-minute demo](https://youtu.be/pbrpS-YJFnw)** (voice-over is an ElevenLabs clone of the author's voice)
 
 RoadLens turns bike-camera and Tesla dashcam footage into human-reviewed road-hazard evidence. Meta **SAM 3.1** segments candidate potholes and other hazards, **Muse Glimmer** triages each candidate, and you confirm or reject every one before the council-ready GeoJSON is exported. The output is GeoJSON plus a draft report you can copy into a council or FixMyStreet submission yourself.
 
