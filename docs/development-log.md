@@ -621,3 +621,35 @@ scores from the same 1,088 SAM frames as before the fixes.
 - **Docs:** wording that overstated what the code does (offline operation,
   "only confirmed GeoJSON", a 1:1 crop, the Tesla plate cropping, the README
   score range) now matches the code.
+
+### Hosted sweep rerun with the new chunk joining
+
+The 3 November hosted hazard sweep was rerun with the new joining of hosted
+chunks, on the same corridor windows and settings
+([data](evaluation/hazard-sweep-rerun-eccup-2026-11-04.json)).
+
+| Prompt | Outbound, 3 Nov → 4 Nov | Return, 3 Nov → 4 Nov |
+|---|---|---|
+| pothole | 15 → 14 | 25 → 25 |
+| manhole cover | 1 → 1 | 12 → 12 |
+| drain grate | 1 → 1 | 3 → 4 |
+| standing water | 0 → 0 | 0 → 0 |
+| road debris | 0 → 0 | 0 → 0 |
+| cracked asphalt | 2 → not rerun | 1 → not rerun |
+
+- **The new joining changed nothing measurable here:** no candidate that
+  differs between the runs lies in a chunk overlap.
+- **The differences are run-to-run variation in the hosted model.** The same
+  request returns scores that differ by up to about 0.01, so objects near its
+  apparent 0.7 cut-off come and go. The pothole track missing on the outbound
+  pass scored 0.704 on 3 November; the extra drain-grate hit is at the same
+  moment as a pothole candidate; manhole-cover swapped one borderline hit in
+  each direction.
+- **The chunking result holds:** the return pass again gives 25 pothole
+  candidates against 16 from a single session.
+- **Cracked asphalt was not rerun:** three attempts stalled without output.
+  The first coincided with the GPU box's system disk filling up (the run
+  outputs were then moved to the scratch drive); the next two hit a
+  20-minute limit. This prompt segments most of the road surface, which may
+  make its responses unusually large, but the cause was not confirmed. Its
+  3 November counts stand.

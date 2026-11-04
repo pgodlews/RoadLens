@@ -1,0 +1,149 @@
+{
+ "date": "2026-11-04",
+ "purpose": "Rerun of the 3 November hosted hazard sweep after changing how hosted chunks are joined (overlap-only objects kept, same-frame duplicates removed by mask IoU).",
+ "footage": "Garmin Varia Vue, Eccup corridor, recorded 2026-10-11",
+ "api": {
+  "base_url": "https://api.meta.ai/v1",
+  "sam_model": "sam-3.1"
+ },
+ "settings": {
+  "fps": 10,
+  "width_px": 1280,
+  "chunk_frames": 200,
+  "chunk_overlap_frames": 5
+ },
+ "windows": {
+  "outbound": {
+   "clip": "GRMS0010.MP4",
+   "source_seconds": [
+    150,
+    360
+   ]
+  },
+  "return": {
+   "clip": "GRMS0012.MP4",
+   "source_seconds": [
+    420,
+    600.6
+   ]
+  }
+ },
+ "baseline": "hazard-sweep-eccup-2026-11-03.json (pothole: chunked runs; other prompts: single-session runs, all under the 16-object cap)",
+ "matching": "A candidate counts as the same when its best source time is within 0.6 s of one in the other run.",
+ "findings": [
+  "No differing candidate lies in a chunk overlap, so the new joining changed no result on this footage.",
+  "The differences are borderline objects near the hosted model's apparent 0.7 cut-off: the same request returns scores that differ by about 0.01 between runs (pothole outbound: 8 of 15 scores identical, the rest within 0.01).",
+  "pothole outbound 15 -> 14: the missing track (best 335.4 s) scored 0.704 on 3 November.",
+  "pothole return 25 -> 25: every candidate found again.",
+  "drain grate return 3 -> 4: the new hit (474.7 s, 0.71) is at the same time as a pothole candidate (a long sunken patch).",
+  "manhole cover: counts unchanged; one borderline hit swapped in each direction, and one track's best frame moved from 475.4 s to 474.7 s."
+ ],
+ "runs": [
+  {
+   "prompt": "pothole",
+   "direction": "outbound",
+   "candidates_2026_11_03": 15,
+   "candidates_2026_11_04": 14,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "pothole",
+   "direction": "return",
+   "candidates_2026_11_03": 25,
+   "candidates_2026_11_04": 25,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "manhole cover",
+   "direction": "outbound",
+   "candidates_2026_11_03": 1,
+   "candidates_2026_11_04": 1,
+   "only_2026_11_03_best_s": [
+    293.9
+   ],
+   "only_2026_11_04_best_s": [
+    257.8
+   ]
+  },
+  {
+   "prompt": "manhole cover",
+   "direction": "return",
+   "candidates_2026_11_03": 12,
+   "candidates_2026_11_04": 12,
+   "only_2026_11_03_best_s": [
+    475.4
+   ],
+   "only_2026_11_04_best_s": [
+    443.7,
+    474.7
+   ]
+  },
+  {
+   "prompt": "drain grate",
+   "direction": "outbound",
+   "candidates_2026_11_03": 1,
+   "candidates_2026_11_04": 1,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "drain grate",
+   "direction": "return",
+   "candidates_2026_11_03": 3,
+   "candidates_2026_11_04": 4,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": [
+    474.7
+   ]
+  },
+  {
+   "prompt": "standing water",
+   "direction": "outbound",
+   "candidates_2026_11_03": 0,
+   "candidates_2026_11_04": 0,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "standing water",
+   "direction": "return",
+   "candidates_2026_11_03": 0,
+   "candidates_2026_11_04": 0,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "road debris",
+   "direction": "outbound",
+   "candidates_2026_11_03": 0,
+   "candidates_2026_11_04": 0,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "road debris",
+   "direction": "return",
+   "candidates_2026_11_03": 0,
+   "candidates_2026_11_04": 0,
+   "only_2026_11_03_best_s": [],
+   "only_2026_11_04_best_s": []
+  },
+  {
+   "prompt": "cracked asphalt",
+   "direction": "outbound",
+   "candidates_2026_11_03": 2,
+   "candidates_2026_11_04": null,
+   "note": "Not rerun: three attempts stalled with no output (the first while the GPU box's disk was full, two more hit a 20-minute limit)."
+  },
+  {
+   "prompt": "cracked asphalt",
+   "direction": "return",
+   "candidates_2026_11_03": 1,
+   "candidates_2026_11_04": null,
+   "note": "Not rerun: three attempts stalled with no output (the first while the GPU box's disk was full, two more hit a 20-minute limit)."
+  }
+ ],
+ "review_note": "Counts and times only; nothing here is a confirmed defect."
+}
