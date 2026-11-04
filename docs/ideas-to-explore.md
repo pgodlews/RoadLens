@@ -85,3 +85,13 @@ Six representative samples illustrate the size estimation technique across disti
   3. Keep results as unreviewed candidates with the same review and export path; acting on a detection (slowing, steering) is a separate safety case.
 - **Guardrails:** Not for motorway speeds: at 31 m/s a frame comes every 7 m and a hosted round trip covers 31 m. Hosted image mode costs $2.50 per 1,000 frames and needs a fast uplink, so live use at fleet scale belongs on the edge.
 
+
+## 5. Driver-Flagged Scans from the Tesla Dashcam Button
+
+- **Priority:** Product roadmap (post-hackathon)
+- **Motivation:** Pressing the dashcam button on a Tesla steering wheel saves the last few minutes to `SavedClips/`, with an `event.json` whose reason is `user_interaction_dashcam_multifunction_selected` and an estimated position. On 4 November the rider used it to save every Eccup clip. A driver who presses it on hitting a pothole has already done the hardest part of the search: saying when and roughly where.
+- **Approach:**
+  1. Index `SavedClips/` and keep only button-press events, not Sentry or crash saves.
+  2. Take the event time as the flag, find the matching moment in the SEI telemetry, and scan only the seconds before it on the rear camera and both repeaters.
+  3. Show each flag in Studio as a driver-flagged stop, with the usual unreviewed candidates and human review.
+- **Guardrails:** The event position is approximate; use the per-frame SEI GPS for locations. Saved clips include home and work, so the scope and privacy rules for Tesla footage still apply, and rear-camera frames are cropped to hide the registration plate.

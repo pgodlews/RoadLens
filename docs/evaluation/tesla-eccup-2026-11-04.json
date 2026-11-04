@@ -1,0 +1,187 @@
+{
+ "date": "2026-11-04",
+ "footage": "Tesla dashcam (TeslaUSB), Eccup corridor only, two passes recorded 2026-11-04 around 12:22 and 12:28",
+ "scope": "12 one-minute clips (rear, left and right repeater) within about 0.5 km of the photographed spots; the rest of the drive stays local",
+ "settings": {
+  "prompt": "pothole",
+  "sampling": "distance (default)",
+  "duration": "whole clip",
+  "gpu": "RTX 3090, two scans in parallel",
+  "code": "tesla-sei branch with the placeholder-score fix"
+ },
+ "photo_spots": {
+  "A": "IMG_3307-3308, taped",
+  "B": "IMG_3309-3312, taped",
+  "C": "IMG_3315-3322, untaped broken stretch"
+ },
+ "matching": "Candidate camera GPS within 15 m of the phone GPS of a photo spot. Both GPS sources err by a few metres, so a match means likely the same place, not proven the same pothole.",
+ "review_note": "Visual checks by the developer from frames; nothing here is a confirmed defect. Rear-camera frames are cropped above the bumper before viewing or publishing.",
+ "scans": [
+  {
+   "clip_start_local": "12:22:33",
+   "pass": "outbound",
+   "camera": "back",
+   "candidates": 16,
+   "sam_frames_including_overlap": 970,
+   "wall_seconds": 445,
+   "tracks_without_valid_score": 1,
+   "near_photo_spots": {
+    "A": {
+     "candidates_within_15_m": 1,
+     "best_score": 0.358,
+     "best_distance_m": 12
+    },
+    "C": {
+     "candidates_within_15_m": 8,
+     "best_score": 0.7,
+     "best_distance_m": 5
+    }
+   }
+  },
+  {
+   "clip_start_local": "12:22:33",
+   "pass": "outbound",
+   "camera": "left_repeater",
+   "candidates": 24,
+   "sam_frames_including_overlap": 1002,
+   "wall_seconds": 443,
+   "tracks_without_valid_score": 1,
+   "near_photo_spots": {
+    "A": {
+     "candidates_within_15_m": 6,
+     "best_score": 0.625,
+     "best_distance_m": 6
+    },
+    "C": {
+     "candidates_within_15_m": 13,
+     "best_score": 0.742,
+     "best_distance_m": 1
+    }
+   }
+  },
+  {
+   "clip_start_local": "12:22:33",
+   "pass": "outbound",
+   "camera": "right_repeater",
+   "candidates": 0,
+   "sam_frames_including_overlap": 537,
+   "wall_seconds": 229,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {}
+  },
+  {
+   "clip_start_local": "12:23:29",
+   "pass": "outbound",
+   "camera": "back",
+   "candidates": 13,
+   "sam_frames_including_overlap": 1088,
+   "wall_seconds": 471,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {
+    "B": {
+     "candidates_within_15_m": 1,
+     "best_score": 0.75,
+     "best_distance_m": 2
+    }
+   }
+  },
+  {
+   "clip_start_local": "12:23:29",
+   "pass": "outbound",
+   "camera": "left_repeater",
+   "candidates": 8,
+   "sam_frames_including_overlap": 857,
+   "wall_seconds": 323,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {
+    "B": {
+     "candidates_within_15_m": 2,
+     "best_score": 0.594,
+     "best_distance_m": 6
+    }
+   }
+  },
+  {
+   "clip_start_local": "12:23:29",
+   "pass": "outbound",
+   "camera": "right_repeater",
+   "candidates": 0,
+   "sam_frames_including_overlap": 560,
+   "wall_seconds": 198,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {}
+  },
+  {
+   "clip_start_local": "12:28:25",
+   "pass": "return",
+   "camera": "back",
+   "candidates": 1,
+   "sam_frames_including_overlap": 850,
+   "wall_seconds": 341,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {}
+  },
+  {
+   "clip_start_local": "12:28:25",
+   "pass": "return",
+   "camera": "left_repeater",
+   "candidates": 0,
+   "sam_frames_including_overlap": 604,
+   "wall_seconds": 235,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {}
+  },
+  {
+   "clip_start_local": "12:28:25",
+   "pass": "return",
+   "camera": "right_repeater",
+   "candidates": 9,
+   "sam_frames_including_overlap": 1074,
+   "wall_seconds": 372,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {
+    "B": {
+     "candidates_within_15_m": 5,
+     "best_score": 0.61,
+     "best_distance_m": 14
+    }
+   }
+  },
+  {
+   "clip_start_local": "12:29:25",
+   "pass": "return",
+   "camera": "back",
+   "candidates": 0,
+   "sam_frames_including_overlap": 169,
+   "wall_seconds": 90,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {}
+  },
+  {
+   "clip_start_local": "12:29:25",
+   "pass": "return",
+   "camera": "left_repeater",
+   "candidates": 0,
+   "sam_frames_including_overlap": 170,
+   "wall_seconds": 87,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {}
+  },
+  {
+   "clip_start_local": "12:29:25",
+   "pass": "return",
+   "camera": "right_repeater",
+   "candidates": 7,
+   "sam_frames_including_overlap": 315,
+   "wall_seconds": 146,
+   "tracks_without_valid_score": 0,
+   "near_photo_spots": {
+    "C": {
+     "candidates_within_15_m": 7,
+     "best_score": 0.758,
+     "best_distance_m": 13
+    }
+   }
+  }
+ ]
+}

@@ -7,6 +7,7 @@ def create_backend(
     name: str,
     checkpoint_path: Path | None = None,
     confidence_threshold: float = 0.5,
+    legacy_stitch: bool = False,
 ) -> SegmentationBackend:
     if name == "local":
         if checkpoint_path is None:
@@ -17,5 +18,5 @@ def create_backend(
     if name == "remote":
         from roadlens.backends.remote import RemoteSamBackend
 
-        return RemoteSamBackend()
+        return RemoteSamBackend(legacy_stitch=legacy_stitch)
     raise ValueError(f"Unknown backend: {name}")

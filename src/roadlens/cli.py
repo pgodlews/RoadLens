@@ -12,13 +12,19 @@ from roadlens.backends import create_backend
 from roadlens.media import prepare_analysis_clip, probe_video
 from roadlens.output import write_frame_result
 from roadlens.report import serve_report
-from roadlens.sizing import GARMIN_VARIA_VUE, annotate_run_sizes, geometry_for
+from roadlens.sizing import (
+    GARMIN_VARIA_VUE,
+    annotate_run_sizes,
+    geometry_for,
+    run_telemetry_source,
+)
 from roadlens.telemetry import read_camera_telemetry
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="roadlens", description="Post-ride analysis for Garmin footage"
+        prog="roadlens",
+        description="Post-ride analysis for Garmin and Tesla dashcam footage",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     segment = commands.add_parser("segment", help="Segment a concept in a video")
@@ -35,11 +41,17 @@ def build_parser() -> argparse.ArgumentParser:
     segment.add_argument("--output", type=Path, required=True)
 
     analyze = commands.add_parser(
-        "analyze", help="Create GPS-linked hazard observations from a Garmin clip"
+        "analyze",
+        help="Create GPS-linked hazard observations from a Garmin or Tesla clip",
     )
     analyze.add_argument("video", type=Path)
     analyze.add_argument("--prompt", default="pothole")
     analyze.add_argument("--backend", choices=("local", "remote"), default="local")
+    analyze.add_argument(
+        "--legacy-stitch",
+        action="store_true",
+        help="Hosted backend: drop later chunks' overlap frames (before 4 Nov)",
+    )
     analyze.add_argument(
         "--checkpoint",
         type=Path,
@@ -135,7 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--output", type=Path, required=True)
 
     telemetry = commands.add_parser(
-        "telemetry", help="Extract timed Garmin GPS from a video"
+        "telemetry", help="Extract timed Garmin or Tesla GPS from a video"
     )
     telemetry.add_argument("video", type=Path)
     telemetry.add_argument("--output", type=Path, required=True)
@@ -266,6 +278,7 @@ def main() -> None:
             args.backend,
             checkpoint_path=args.checkpoint,
             confidence_threshold=args.confidence,
+            legacy_stitch=args.legacy_stitch,
         )
         frames = []
         for result in backend.segment_video(working_clip, args.prompt):
@@ -312,7 +325,9 @@ def main() -> None:
     elif args.command == "report":
         serve_report(args.output, args.pmtiles, args.host, args.port)
     elif args.command == "size":
-        geometry = replace(GARMIN_VARIA_VUE, camera_height_m=args.camera_height)
+        geometry = geometry_for(run_telemetry_source(args.output))
+        if geometry is not None:
+            geometry = replace(geometry, camera_height_m=args.camera_height)
         for item in annotate_run_sizes(args.output, geometry):
             size = item["size_estimate"]
             print(

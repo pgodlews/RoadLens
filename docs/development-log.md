@@ -438,7 +438,7 @@ tool have the same switch
 Hosted runs (`roadlens analyze --backend remote` and Studio's hosted mode)
 still send fixed 10 or 5 fps clips; making them speed-aware is a next step.
 
-### Tesla dashcam as a second camera (local branch)
+### Tesla dashcam as a second camera
 
 Few riders own a Garmin Varia, but many drivers own a Tesla. Tesla firmware
 2025.44.25+ writes a protobuf SEI message into every video frame while the car
@@ -493,3 +493,131 @@ each):
   back to decoding from the start when a seek is refused.
 
 This footage includes the rider's home area and stays local.
+
+## 4 November 2026
+
+### Tesla on the Eccup corridor
+
+The town drive above had to stay local, so the rider drove the Eccup
+corridor at lunchtime, pressing the steering-wheel dashcam button to save
+clips, and then walked the road photographing potholes with a phone (some
+with a tape measure). Only the 12 one-minute clips within about 0.5 km of
+the photographed spots were copied off the car: rear, left and right
+repeater, on an outbound and a return pass. Each was scanned for `pothole`
+on the RTX 3090 with the default distance sampling
+([data](evaluation/tesla-eccup-2026-11-04.json)).
+
+A candidate counts as near a photo spot when its camera GPS is within 15 m
+of the phone's GPS for that photo. Both positions err by a few metres, so
+this means likely the same place, not proven the same pothole.
+
+| Photo spot | Outbound pass | Return pass |
+|---|---|---|
+| A: IMG_3307–3308 | left repeater 0.63 at 6 m; rear 0.36 at 12 m | nothing |
+| B: IMG_3309–3312 | rear 0.75 at 2 m; left repeater 0.59 at 6 m | right repeater 0.61 at 14 m |
+| C: IMG_3315–3322 | left repeater 0.74 at 1 m; rear 0.70 at 5 m | right repeater 0.76 at 13 m |
+
+- **Which repeater sees a pothole depends on the direction of travel.** On
+  the outbound pass the right repeater found nothing; on the return pass the
+  left repeater found nothing. On a single-track lane the same pothole is on
+  the nearside one way and the offside the other. The town drive's
+  conclusion that the right repeater is useless holds only for two-way
+  roads, so scan both.
+- **The rear camera helped outbound only:** on the return pass it gave one
+  candidate, 23 m from the nearest spot.
+- **Frames checked by eye, mixed:** at spot B the rear camera masks the long
+  nearside pothole along its length; at spot A the left repeater masks a
+  pothole at the road edge. But at spot C the left repeater's 0.74 mask is
+  on a small patch while a large pothole in the foreground of the same
+  frame is unmasked, and the return-pass hit at spot B is a small mark at
+  the edge of the frame. The left repeater's frames are soft from motion
+  and compression.
+- **Cost:** 78 unreviewed candidates from 8,196 SAM frames, about 56 minutes
+  of GPU time for about 3.5 minutes of driving per camera.
+- **Rear-camera frames show the car's registration plate and bumper.** For
+  this write-up they were cropped above the bumper by hand before viewing or
+  publishing; RoadLens itself does not crop or mask them yet, so the rule is
+  a manual step (AGENTS.md).
+
+Two mistakes along the way, recorded so they are not repeated:
+
+- `roadlens scan` defaults to `--duration 10`, so the first run looked at
+  only the first 10 s of each clip and its zeros meant nothing. Pass the
+  clip length.
+- **Placeholder-score crash, fixed:** SAM 3.1 sometimes returns a score of
+  -10000 for an object it remembers but no longer detects. A track seen only
+  that way never got an evidence frame, and the scan crashed at the end. Such
+  tracks are now skipped and counted in `tracks_without_valid_score` in
+  `scan.json`; scans that never hit this case give the same results as
+  before. Two of the 12 clips had one such track each.
+
+No tape comparison was made: none of the existing Garmin size estimates is
+within 10 m of a taped pothole (the rider-reported one is about 830 m from
+today's photos). Sizes stay camera-geometry estimates that have not been
+checked against a tape measure.
+
+### Independent code review and fixes
+
+Two other models reviewed the whole codebase, including the Tesla branch,
+read-only and in separate halves: Codex (GPT-6 Astra, core pipeline) and
+Kimi Code (K3.1 Pro, Studio, report, VLM, MCP and the docs). Every finding
+used here was checked against the code before it was acted on. Of the 11
+findings from an earlier review, 9 were already fixed, one was partly fixed
+and one was still present; both are fixed below. No path was found that lets
+model output confirm or reject a candidate.
+
+Fixed in this round:
+
+- **Placeholder scores, again:** the -10000 fix above still let a placeholder
+  become a track's evidence when its crop was flat, because the ranking gave
+  it -0.0, which beats the starting value. Placeholder detections are now
+  never chosen as evidence.
+- **`roadlens size` used Garmin geometry for every run,** so re-sizing a Tesla
+  scan would have produced centimetres from the wrong camera. It now reads the
+  run's camera from `scan.json` or the observations and leaves Tesla runs
+  unsized.
+- **Resume:** a half-written `chunks.jsonl` line blocked every later resume;
+  it now reruns that chunk. A completed manifest from before source
+  signatures is refused instead of trusted.
+- **Ride offsets:** "20 miles" was read as 20 minutes; every word must now be
+  part of the duration.
+- **Hosted chunk overlap:** joining hosted SAM chunks dropped every frame a
+  later chunk shared with the one before, so an object seen only there (for
+  example after the earlier chunk hit its 16-object cap) was lost. Both
+  chunks' detections are now kept, with same-frame duplicates removed by mask
+  overlap. This can raise hosted candidate counts compared with the 3 November
+  runs; `roadlens analyze --legacy-stitch` restores the old joining.
+- **Hosted requests with a frame limit** uploaded the whole clip; only the
+  requested frames are sent now.
+- **`analyze` and placeholder scores:** the same -10000 placeholders are
+  skipped when `analyze` builds candidates.
+- **Known limitation, `analyze` times:** `analyze` and Studio's hosted mode
+  derive candidate times from the resampled working clip's frame index, so a
+  time can be up to about half a source frame (14–17 ms) from the source
+  timestamp; `roadlens scan` uses real source timestamps. At 7 m/s that is
+  about 12 cm, far below the metres of error of consumer GPS without RTK, so
+  positions are unaffected. Worth fixing only if exact original-frame
+  retrieval is ever needed.
+- **Tesla parsing:** SEI messages are now read by their declared type and
+  size, fields with the wrong protobuf type are rejected, and truncated files
+  fail with a clear error. On all 100 real Tesla clips from 4 November the new
+  parser gives exactly the same samples as before. A clip whose Tesla fixes
+  are all invalid now reports `tesla_sei_unusable` with its rejected count,
+  not `none`.
+- **Sampling:** a stop frame already taken by the sharpness look-ahead could
+  be added again or out of order, which made frame extraction fail. Across
+  3,000 random speed traces the fix changed only the 130 outputs that were
+  previously out of order; every valid output is identical.
+- **Benchmarks:** the hosted benchmark now records failed requests separately
+  instead of timing them, and the edge benchmark releases each model before
+  loading the next, so peak-memory figures are per model. The 3 November
+  numbers were not rerun.
+
+After all fixes the test suite grew from 83 to 144 tests, all passing on the
+RTX 3090 box, and rescanning one of today's Tesla clips (rear camera,
+second minute of the outbound pass) gave the same 13 candidates, times and
+scores from the same 1,088 SAM frames as before the fixes.
+- **Tests:** two scan tests failed instead of skipping without OpenCV.
+- **Docs:** wording that overstated what the code does (offline operation,
+  "only confirmed GeoJSON", a 1:1 crop, the Tesla plate cropping, the README
+  score range) now matches the code.

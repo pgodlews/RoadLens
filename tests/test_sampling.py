@@ -56,6 +56,23 @@ def test_sharpness_selection_is_local_and_preserves_actual_time():
     assert np.all(np.diff([c.source_seconds for c in selected]) > 0)
 
 
+@pytest.mark.parametrize("window", [0.05, 0.1])
+def test_stop_transition_does_not_repeat_sharpness_lookahead(window):
+    times = (np.arange(41) / 20).tolist()
+    quality = np.ones(len(times))
+    quality[20] = 50  # The time limit at 0.95 s looks ahead to the stop at 1 s.
+    selected = select_frames(
+        times,
+        quality.tolist(),
+        np.zeros(len(times)),
+        max_interval=0.95,
+        sharpness_window=window,
+    )
+    selected_times = [c.source_seconds for c in selected]
+    assert selected_times.count(1.0) == 1
+    assert np.all(np.diff(selected_times) > 0)
+
+
 def test_speed_interpolation_uses_playback_time_and_rejects_gaps():
     created = datetime(2026, 1, 1, tzinfo=UTC)
     samples = tuple(

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 import threading
 import urllib.error
 import urllib.request
@@ -15,7 +18,13 @@ from roadlens.pmtiles_roads import (
     encode_varint,
     latlon_to_zxy,
 )
-from roadlens.studio import create_studio_server, render_studio_html
+from roadlens.studio import (
+    STUDIO_HTML,
+    StudioState,
+    _execute_targeted_job,
+    create_studio_server,
+    render_studio_html,
+)
 from roadlens.telemetry import TelemetryResult, TelemetrySample
 
 
@@ -406,3 +415,206 @@ def test_studio_human_review_and_report_workflow(studio_env):
     assert status == 200
     assert saved_res["saved"] is True
     assert (run_dir / "summary-report.md").read_text(encoding="utf-8") == edited
+
+    # Reopening after a later decision warns that the saved summary is stale.
+    _http_json(
+        f"{base}/api/runs/{run_id}/review",
+        method="POST",
+        body={"object_id": 1, "review_status": "confirmed"},
+    )
+    report_time = (run_dir / "summary-report.md").stat().st_mtime_ns
+    os.utime(run_dir / "review-decisions.json", ns=(report_time + 1, report_time + 1))
+    _, reopened = _http_json(
+        f"{base}/api/open-run", method="POST", body={"path": str(run_dir)}
+    )
+    assert reopened["summary_report_stale"] is True
+    assert reopened["summary_report"] == edited
+    _http_json(
+        f"{base}/api/runs/{run_id}/draft-report",
+        method="POST",
+        body={"vlm_mode": "none"},
+    )
+    _, reopened = _http_json(
+        f"{base}/api/open-run", method="POST", body={"path": str(run_dir)}
+    )
+    assert reopened["summary_report_stale"] is False
+
+
+@pytest.mark.parametrize("detection_ids", [(7, 8), (7,), (7, 42)])
+def test_studio_merge_keeps_pass_context_and_never_guesses_shared_boxes(
+    tmp_path, monkeypatch, detection_ids
+):
+    from roadlens.analysis import Observation, write_observations
+
+    state = _studio_state(tmp_path)
+    state.jobs["merge"] = {}
+    passes = [
+        {
+            "clip_path": str(state.workspace_dir / clip),
+            "start_seconds": start,
+            "end_seconds": start + 10,
+            "pass_index": index,
+            "street_name": street,
+            "place_name": place,
+        }
+        for index, clip, start, street, place in (
+            (1, "one.mp4", 20.0, "First Road", "First Place"),
+            (2, "two.mp4", 40.0, "Second Road", "Second Place"),
+        )
+    ]
+    detections = [
+        {"object_id": oid, "box_xywh_normalized": [0.1 * (i + 1), 0.5, 0.1, 0.1]}
+        for i, oid in enumerate(detection_ids)
+    ]
+
+    def fake_scan(args):
+        observation = Observation(
+            object_id=42,
+            prompt=args.prompt,
+            backend="LocalSamBackend",
+            first_source_seconds=args.start,
+            last_source_seconds=args.start + 1.0,
+            best_source_seconds=args.start + 0.5,
+            best_frame_index=3,
+            recorded_utc=datetime(2026, 7, 15, tzinfo=UTC),
+            score=0.8,
+            foreground_pixels=100,
+            latitude=53.85,
+            longitude=-1.53,
+            location_source="camera_gps",
+        )
+        write_observations([observation], args.video, args.output)
+        (args.output / "result-000003.json").write_text(
+            json.dumps({"detections": detections})
+        )
+
+    monkeypatch.setattr("roadlens.scan.run_scan", fake_scan)
+    _execute_targeted_job(state, "merge", passes, "pothole", "scan_coarse", "none")
+    job = state.jobs["merge"]
+    assert job["status"] == "complete", job["progress"]
+    run_dir = state.runs[job["run"]["run_id"]]
+    merged = json.loads((run_dir / "observations.json").read_text())
+    geojson = json.loads((run_dir / "observations.geojson").read_text())
+    report = (run_dir / "summary-report.md").read_text()
+    for index, (item, feature, seg) in enumerate(
+        zip(merged, geojson["features"], passes, strict=True)
+    ):
+        for key in ("pass_index", "street_name", "place_name"):
+            assert item[key] == feature["properties"][key] == seg[key]
+        assert (
+            item["clip_name"]
+            == feature["properties"]["clip_name"]
+            == Path(seg["clip_path"]).name
+        )
+        assert item["best_source_seconds"] == seg["start_seconds"] + 0.5
+        assert item["review_status"] == "unreviewed"
+        result = json.loads((run_dir / f"result-{index:06d}.json").read_text())
+        if 42 in detection_ids or len(detection_ids) == 1:
+            expected = detections[-1] if 42 in detection_ids else detections[0]
+            assert result["detections"] == [{**expected, "object_id": index}]
+            assert (
+                job["run"]["observations"][index]["box_xywh_normalized"]
+                == expected["box_xywh_normalized"]
+            )
+        else:
+            assert result["detections"] == []
+            assert job["run"]["observations"][index]["box_xywh_normalized"] is None
+    first, second = report.split("### Pass 1")[1].split("### Pass 2")
+    assert "First Road, First Place · one.mp4" in first and "Candidate #0" in first
+    assert "Second Road, Second Place · two.mp4" in second and "Candidate #1" in second
+    assert "Second Road" not in first and "First Road" not in second
+
+
+def test_studio_marks_existing_drafts_stale_and_clears_on_redraft():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is needed to exercise the review UI")
+    assert "\\" not in STUDIO_HTML
+    assert '"""' not in STUDIO_HTML
+    assert "Garmin camera GPS" not in STUDIO_HTML
+    assert "Points are camera GPS positions" in STUDIO_HTML
+    functions = STUDIO_HTML.split("function markReportStale", 1)[1].split(
+        "async function decideAndAdvance", 1
+    )[0]
+    draft_handler = STUDIO_HTML.split(
+        "document.getElementById('draftReportBtn').onclick =", 1
+    )[1].split("document.getElementById('saveReportBtn')", 1)[0]
+    script = (
+        """
+const elements = {
+  reportEditor: {value: 'Existing draft'}, reportStaleNote: {hidden: true},
+  draftReportBtn: {textContent: 'Draft report'}, vlmMode: {value: 'none'},
+  reportSection: {style: {}}
+};
+const document = {getElementById: id => elements[id]};
+const activeRun = {run_id: 'run', summary_report: 'Existing draft'};
+const candidateMarkers = new Map();
+function updateCounts() {}
+async function api(path) {
+  return path.endsWith('/review')
+    ? {review_status: 'confirmed'} : {summary_report: 'New draft'};
+}
+"""
+        + "function markReportStale"
+        + functions
+        + "const draft = "
+        + draft_handler
+        + """
+(async () => {
+  const item = {object_id: 1, review_status: 'unreviewed'};
+  await setDecision(item, 'confirmed');
+  if (elements.reportStaleNote.hidden || !activeRun.summary_report_stale)
+    throw Error('missing stale note');
+  if (!elements.draftReportBtn.textContent.includes('Redraft'))
+    throw Error('missing redraft invitation');
+  if (elements.reportEditor.value !== 'Existing draft') throw Error('lost draft');
+  await draft();
+  if (!elements.reportStaleNote.hidden || activeRun.summary_report_stale)
+    throw Error('still stale');
+  if (elements.reportEditor.value !== 'New draft') throw Error('missing new draft');
+  await setDecision(item, 'confirmed');
+  if (!elements.reportStaleNote.hidden) throw Error('unchanged status marked stale');
+})();
+"""
+    )
+    subprocess.run([node, "-e", script], capture_output=True, text=True, check=True)
+
+
+def _studio_state(tmp_path):
+    """Build a real Studio state without requiring a listening socket."""
+    z, x, y = latlon_to_zxy(53.8500, -1.5300, 15)
+    pmtiles_path = tmp_path / "demo.pmtiles"
+    pmtiles_path.write_bytes(
+        build_minimal_pmtiles_v3(
+            [(z, x, y, _build_synthetic_mvt_road_tile())], max_zoom=15
+        )
+    )
+    return StudioState(
+        workspace_dir=tmp_path / "workspace",
+        pmtiles_path=pmtiles_path,
+        checkpoint_path=tmp_path / "unused-checkpoint",
+    )
+
+
+def test_studio_reopened_summary_stays_stale_until_updated(tmp_path):
+    state = _studio_state(tmp_path)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "observations.json").write_text(
+        json.dumps([{"object_id": 0, "review_status": "unreviewed"}])
+    )
+    report_path = run_dir / "summary-report.md"
+    report_path.write_text("Existing draft")
+    run_id = state.register_run(run_dir)
+    assert state.serialize_run(run_id)["summary_report_stale"] is False
+    state.update_review_decision(run_id, 0, "confirmed")
+    report_time = report_path.stat().st_mtime_ns
+    os.utime(run_dir / "review-decisions.json", ns=(report_time + 1, report_time + 1))
+    serialized = state.serialize_run(run_id)
+    assert serialized["summary_report_stale"] is True
+    assert serialized["summary_report"] == "Existing draft"
+    assert serialized["observations"][0]["review_status"] == "confirmed"
+    report_path.write_text("Updated draft")
+    assert state.serialize_run(run_id)["summary_report_stale"] is False
+    state.update_review_decision(run_id, 0, "confirmed")
+    assert state.serialize_run(run_id)["summary_report_stale"] is False

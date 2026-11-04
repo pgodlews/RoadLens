@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Any
 
 from roadlens.domain import FrameSegmentations
 from roadlens.telemetry import TelemetrySample
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,11 @@ def build_observations(
     clip_fps: float,
     location_source: str = "garmin_camera_gps",
 ) -> list[Observation]:
+    """Build candidates from evidence, counting tracks SAM only remembers.
+
+    Negative SAM scores denote memory placeholders, not detections. Missing
+    scores remain eligible for backends that do not provide confidence.
+    """
     if clip_fps <= 0:
         raise ValueError("clip_fps must be positive")
     tracks: dict[tuple[str, int], list[tuple[FrameSegmentations, Any]]] = {}
@@ -63,9 +71,14 @@ def build_observations(
             tracks.setdefault(key, []).append((frame, detection))
 
     observations = []
+    tracks_without_valid_score = 0
     for (backend, object_id), items in tracks.items():
+        valid = [item for item in items if item[1].score is None or item[1].score >= 0]
+        if not valid:
+            tracks_without_valid_score += 1
+            continue
         best_frame, best = max(
-            items,
+            valid,
             key=lambda item: (
                 item[1].score if item[1].score is not None else 0,
                 int(item[1].mask.sum()),
@@ -97,6 +110,8 @@ def build_observations(
                 ),
             )
         )
+    if tracks_without_valid_score:
+        logger.warning("tracks_without_valid_score=%d", tracks_without_valid_score)
     return sorted(observations, key=lambda item: item.best_source_seconds)
 
 

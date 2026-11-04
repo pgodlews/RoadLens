@@ -68,6 +68,9 @@ def decode_sei_metadata(data: bytes) -> dict[str, Any]:
         while i < len(data):
             key, i = _varint(data, i)
             field, wire = key >> 3, key & 7
+            definition = _FIELDS.get(field)
+            if definition is not None and wire != definition[1]:
+                raise ValueError(f"Unexpected wire type {wire} for {definition[0]}")
             if wire == 0:
                 value, i = _varint(data, i)
             elif wire == 1:
@@ -82,9 +85,8 @@ def decode_sei_metadata(data: bytes) -> dict[str, Any]:
                 continue
             else:
                 raise ValueError(f"Unsupported protobuf wire type {wire}")
-            name = _FIELDS.get(field, (None,))[0]
-            if name is not None:
-                out[name] = value
+            if definition is not None:
+                out[definition[0]] = value
     except (IndexError, struct.error) as error:
         raise ValueError("Truncated SEI metadata") from error
     if i != len(data):
@@ -106,25 +108,44 @@ def _unescape(data: bytes) -> bytes:
 
 
 def sei_payload(nal: bytes) -> bytes | None:
-    """Tesla protobuf bytes from an SEI user-data-unregistered NAL, or None.
+    """First Tesla protobuf in an SEI NAL, or None if none is recognised."""
+    return next(_sei_payloads(nal), None)
 
-    After the NAL header, payload type (5) and payload size, Tesla writes a
-    run of 0x42 bytes, a 0x69 byte, the protobuf message and the RBSP
-    trailing byte.
+
+def _sei_payloads(nal: bytes) -> Iterator[bytes]:
+    """Respect SEI message boundaries so other payloads cannot become GPS.
+
+    Tesla's type-5 payload starts with a run of 0x42 bytes and a 0x69 byte,
+    followed by the protobuf. Sizes apply after emulation-prevention removal.
     """
-    if len(nal) < 4 or nal[0] & 0x1F != 6 or nal[1] != 5:
-        return None
-    body = _unescape(nal[2:])
+    if not nal or nal[0] & 0x1F != 6:
+        return
+    body = _unescape(nal[1:])
     i = 0
-    while i < len(body) and body[i] == 0xFF:  # payload size, 0xFF-extended
-        i += 1
-    i += 1
-    start = i
-    while i < len(body) and body[i] == 0x42:
-        i += 1
-    if i == start or i + 1 >= len(body) or body[i] != 0x69:
-        return None
-    return body[i + 1 : -1]
+    while i < len(body):
+        if body[i] == 0x80 and not any(body[i + 1 :]):
+            return  # RBSP trailing bits, optionally followed by zero padding.
+        values = []
+        for _ in range(2):  # payload type and size, both 0xFF-continued.
+            value = 0
+            while i < len(body) and body[i] == 0xFF:
+                value += 255
+                i += 1
+            if i == len(body):
+                return
+            values.append(value + body[i])
+            i += 1
+        kind, size = values
+        end = i + size
+        if end >= len(body):  # A payload must leave room for RBSP trailing bits.
+            return
+        if kind == 5:
+            start = i
+            while i < end and body[i] == 0x42:
+                i += 1
+            if i > start and i + 1 < end and body[i] == 0x69:
+                yield body[i + 1 : end]
+        i = end
 
 
 def _mdat_range(fp) -> tuple[int, int]:
@@ -136,11 +157,15 @@ def _mdat_range(fp) -> tuple[int, int]:
         size, kind = struct.unpack(">I4s", fp.read(8))
         header = 8
         if size == 1:
+            if start + 16 > end:
+                raise ValueError("Truncated MP4 atom header")
             size, header = struct.unpack(">Q", fp.read(8))[0], 16
         elif size == 0:
             size = end - start
         if size < header:
             raise ValueError("Invalid MP4 atom size")
+        if size > end - start:
+            raise ValueError("Truncated MP4 atom")
         if kind == b"mdat":
             return start + header, start + size
         fp.seek(start + size)
@@ -152,15 +177,16 @@ def iter_sei(video_path: Path) -> Iterator[tuple[int, dict[str, Any]]]:
     with open(video_path, "rb") as fp:
         lo, hi = _mdat_range(fp)
         fp.seek(lo)
-        while fp.tell() + 5 <= hi:
+        while fp.tell() < hi:
             offset = fp.tell()
+            if hi - offset < 4:
+                raise ValueError("Truncated MP4 NAL length")
             (size,) = struct.unpack(">I", fp.read(4))
-            if size < 2 or offset + 4 + size > hi:
-                break
-            head = fp.read(2)
-            if head[0] & 0x1F == 6 and head[1] == 5:
-                payload = sei_payload(head + fp.read(size - 2))
-                if payload:
+            if size < 1 or offset + 4 + size > hi:
+                raise ValueError("Invalid or truncated MP4 NAL")
+            head = fp.read(1)
+            if head[0] & 0x1F == 6:
+                for payload in _sei_payloads(head + fp.read(size - 1)):
                     try:
                         yield offset, decode_sei_metadata(payload)
                     except ValueError:

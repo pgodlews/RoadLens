@@ -24,7 +24,7 @@ class TelemetrySample:
 class TelemetryResult:
     samples: tuple[TelemetrySample, ...]
     rejected_samples: int
-    # Which camera's metadata the samples came from: "garmin" or "tesla_sei".
+    # Camera metadata source; "tesla_sei_unusable" means all fixes were rejected.
     source: str = "garmin"
 
     @property
@@ -56,6 +56,8 @@ def read_camera_telemetry(video_path: Path) -> TelemetryResult:
         tesla = TelemetryResult((), 0)
     if tesla.samples:
         return tesla
+    if tesla.source == "tesla_sei" and tesla.rejected_samples:
+        return TelemetryResult((), tesla.rejected_samples, source="tesla_sei_unusable")
     return TelemetryResult((), garmin.rejected_samples, source="none")
 
 

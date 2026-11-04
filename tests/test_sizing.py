@@ -11,6 +11,7 @@ from roadlens.sizing import (
     fit_kinematic_geometry,
     geometry_for,
     mask_footprint,
+    run_telemetry_source,
 )
 
 H, W = 1080, 1344
@@ -133,3 +134,51 @@ def test_uncalibrated_camera_is_not_sized_with_garmin_numbers(tmp_path):
     assert annotated[0]["size_estimate"]["status"] == "unavailable"
     assert "measured height" in annotated[0]["size_estimate"]["reason"]
     assert geometry_for("garmin") is not None
+
+
+def test_size_command_keeps_tesla_runs_unsized(tmp_path, monkeypatch):
+    from roadlens.cli import main
+
+    mask = ground_rectangle_mask(near_m=3.0, length_m=0.6, width_m=0.3)
+    detection = {
+        "object_id": 1,
+        "box_xywh_normalized": [0.4, 0.6, 0.2, 0.1],
+        "mask_rle": encode_mask(mask),
+    }
+    (tmp_path / "result-000000.json").write_text(
+        json.dumps({"frame_index": 0, "detections": [detection]})
+    )
+    (tmp_path / "observations.json").write_text(
+        json.dumps([{"object_id": 1, "best_frame_index": 0}])
+    )
+    (tmp_path / "scan.json").write_text(json.dumps({"telemetry_source": "tesla_sei"}))
+
+    # `roadlens size` used to apply Garmin geometry to any run.
+    monkeypatch.setattr("sys.argv", ["roadlens", "size", str(tmp_path)])
+    main()
+
+    saved = json.loads((tmp_path / "observations.json").read_text())
+    assert saved[0]["size_estimate"]["status"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    ("files", "expected"),
+    [
+        ({"scan.json": {"telemetry_source": "tesla_sei"}}, "tesla_sei"),
+        ({"observations.json": [{"location_source": "tesla_camera_gps"}]}, "tesla_sei"),
+        (
+            {
+                "observations.json": [
+                    {"location_source": "garmin_camera_gps"},
+                    {"location_source": "unavailable"},
+                ]
+            },
+            "garmin",
+        ),
+        ({}, "garmin"),  # runs from before Tesla support
+    ],
+)
+def test_run_telemetry_source(tmp_path, files, expected):
+    for name, content in files.items():
+        (tmp_path / name).write_text(json.dumps(content))
+    assert run_telemetry_source(tmp_path) == expected

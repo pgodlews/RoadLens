@@ -62,6 +62,72 @@ def test_decode_sei_metadata_reads_tesla_fields():
         tesla.decode_sei_metadata(sei_message(53.8, -1.55, 6.5)[:-5])
 
 
+@pytest.mark.parametrize("wire,value", [(0, varint(53)), (2, varint(1) + b"x")])
+def test_decode_sei_metadata_rejects_wrong_latitude_wire_type(wire, value):
+    with pytest.raises(ValueError, match="wire type"):
+        tesla.decode_sei_metadata(varint(11 << 3 | wire) + value)
+
+
+def sei_header_value(value):
+    return b"\xff" * (value // 255) + bytes([value % 255])
+
+
+def test_sei_payload_finds_tesla_after_another_message(tmp_path):
+    message = sei_message(53.8, -1.55, 6.5)
+    body = b"\x42" * 3 + b"\x69" + message
+    other = sei_header_value(260) + sei_header_value(300) + b"x" * 300
+    nal = b"\x06" + escape(other + b"\x05" + sei_header_value(len(body)) + body)
+    nal += b"\x80"
+    assert tesla.sei_payload(nal) == message
+    clip = tmp_path / "clip.mp4"
+    data = struct.pack(">I", len(nal)) + nal
+    clip.write_bytes(struct.pack(">I4s", 8 + len(data), b"mdat") + data)
+    assert list(tesla.iter_sei(clip)) == [(8, tesla.decode_sei_metadata(message))]
+
+
+def test_sei_payload_uses_declared_size_and_stops_at_trailing_bits():
+    message = sei_message(53.8, -1.55, 6.5)
+    body = b"\x42" * 260 + b"\x69" + message
+    header = b"\x05" + sei_header_value(len(body))
+    assert (
+        tesla.sei_payload(b"\x06" + escape(header + body + b"\x01\x02xx\x80"))
+        == message
+    )
+    assert tesla.sei_payload(b"\x06\x80") is None
+
+
+@pytest.mark.parametrize("header", [b"\x05\xff", b"\xff", b"\x05\xff\x10"])
+def test_sei_payload_rejects_truncated_or_overstated_size(header):
+    assert tesla.sei_payload(b"\x06" + header + b"\x42\x69\x08\x01\x80") is None
+
+
+def test_iter_sei_reads_each_tesla_message_before_trailing_bits(tmp_path):
+    messages = [sei_message(53.8, -1.55, 6.5, seq=seq) for seq in (1, 2)]
+    payloads = [b"\x42\x69" + message for message in messages]
+    body = b"".join(b"\x05" + sei_header_value(len(p)) + p for p in payloads)
+    nal = b"\x06" + escape(body + b"\x80\x00\x00")
+    clip = tmp_path / "clip.mp4"
+    data = struct.pack(">I", len(nal)) + nal
+    clip.write_bytes(struct.pack(">I4s", 8 + len(data), b"mdat") + data)
+    assert [meta["frame_seq_no"] for _, meta in tesla.iter_sei(clip)] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        struct.pack(">I4s", 32, b"mdat") + b"\x00\x00\x00\x02\x06",
+        struct.pack(">I4s", 1, b"mdat") + b"\x00\x00",
+        struct.pack(">I4s", 12, b"mdat") + b"\x00\x00\x00\x02",
+        struct.pack(">I4s", 10, b"mdat") + b"\x00\x00",
+    ],
+)
+def test_iter_sei_rejects_truncated_mdat_as_value_error(tmp_path, data):
+    clip = tmp_path / "truncated.mp4"
+    clip.write_bytes(data)
+    with pytest.raises(ValueError, match="MP4|NAL"):
+        list(tesla.iter_sei(clip))
+
+
 def test_sei_payload_removes_emulation_prevention_bytes():
     # Zero latitude bytes force 00 00 0x sequences that H.264 must escape.
     message = sei_message(0.0, -1.55, 0.0)

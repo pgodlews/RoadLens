@@ -2,7 +2,7 @@
 
 ![RoadLens: Ride it. Review it. Report it.](docs/samples/roadlens-hero.jpg)
 
-RoadLens turns bike-camera footage into human-reviewed road-hazard evidence. Meta **SAM 3.1** segments candidate potholes and other hazards, **Muse Glimmer** triages each candidate, and you confirm or reject every one before anything is exported. The output is GeoJSON plus a draft report you can copy into a council or FixMyStreet submission yourself.
+RoadLens turns bike-camera and Tesla dashcam footage into human-reviewed road-hazard evidence. Meta **SAM 3.1** segments candidate potholes and other hazards, **Muse Glimmer** triages each candidate, and you confirm or reject every one before the council-ready GeoJSON is exported. The output is GeoJSON plus a draft report you can copy into a council or FixMyStreet submission yourself.
 
 It is a **post-ride analysis workflow**: not a live warning system, and never an automated council spammer.
 
@@ -16,18 +16,18 @@ Potholes are a real danger on rural lanes, and councils act on reports with clea
 
 ```mermaid
 flowchart LR
-  A["Ride footage<br/>+ Garmin GPS"] --> B["1. Scope<br/>pick a stretch on an<br/>offline OSM map"]
-  B --> C["2. Segment<br/>SAM 3.1, a sharp frame<br/>every ~1 m, 30 fps refine"]
+  A["Ride or drive footage<br/>+ Garmin or Tesla GPS"] --> B["1. Scope<br/>pick a stretch on an<br/>offline OSM map"]
+  B --> C["2. Segment<br/>SAM 3.1, a sharp frame<br/>every ~1 m, finer near hits"]
   C --> D["3. Triage<br/>Muse Glimmer judges an<br/>unmasked close-up"]
   D --> E["4. Review<br/>human confirms<br/>or rejects each one"]
   E --> F["5. Export<br/>confirmed-only GeoJSON<br/>+ draft report"]
 ```
 
 1. **Scope:** index a ride folder and pick a stretch by clicking two points on the map, by street name, by ride time ("20 minutes in") or by clock time ("around 12:30"). Street lookup runs offline from a local PMTiles archive. Choose a hazard preset (pothole, cracking, debris, flooding, fallen branch, sunken ironwork) or type your own.
-2. **Segment:** RoadLens integrates Garmin speed to pick one sharp frame about every metre, runs SAM 3.1 with a text prompt, then re-scans ±2 s around each hit at the native 30 fps. Every frame keeps its exact source timestamp and camera GPS fix.
-3. **Triage:** Muse Glimmer 30B (local, via llama.cpp) or Muse Spark 1.3 on the Meta Model API classifies each candidate as `hazard_candidate`, `sealed_repair`, `surface_debris_or_stain` or `uncertain`. It sees the raw frame plus an unmasked 1:1 crop, because a coloured SAM mask hid the asphalt texture and misled it.
+2. **Segment:** RoadLens integrates the camera's own speed (Garmin or Tesla) to pick one sharp frame about every metre, runs SAM 3.1 with a text prompt, then re-scans from 10 m before to 15 m after each hit at about one frame per 0.25 m. Every frame keeps its exact source timestamp and camera GPS fix.
+3. **Triage:** Muse Glimmer 30B (local, via llama.cpp) or Muse Spark 1.3 on the Meta Model API classifies each candidate as `hazard_candidate`, `sealed_repair`, `surface_debris_or_stain` or `uncertain`. It sees the raw frame plus an unmasked close-up of the candidate, because a coloured SAM mask hid the asphalt texture and misled it.
 4. **Review:** in RoadLens Studio you step through candidates with the evidence, every other detection in the same frame, the model's verdict, an approximate size and the camera GPS, pressing **C** to confirm or **X** to reject. Model output never changes `review_status`; only you do.
-5. **Export:** only human-confirmed candidates go into the GeoJSON. Points are labelled as camera GPS positions, not surveyed defect locations. Nothing is submitted anywhere automatically.
+5. **Export:** only human-confirmed candidates go into the council-ready GeoJSON (a separately labelled full-audit download and each scan's working `observations.geojson` list every candidate, for your records only). Points are labelled as camera GPS positions, not surveyed defect locations. Nothing is submitted anywhere automatically.
 
 The same tools are exposed to AI agents through an MCP server (`roadlens mcp`) with an [investigator skill](skills/roadlens-investigator/SKILL.md), so an assistant can find "the potholes on Eccup Moor Road" for you, and still hands the confirm/reject step back to you.
 
@@ -39,7 +39,7 @@ The same tools are exposed to AI agents through an MCP server (`roadlens mcp`) w
 
 ## Results on real footage
 
-All results come from real Garmin Varia Vue footage of a rural lane near Eccup, Leeds, recorded on 11 October 2026.
+All results come from real footage of a rural lane near Eccup, Leeds: Garmin Varia Vue bike-camera footage recorded on 11 October 2026, and Tesla dashcam footage recorded on 4 November 2026.
 
 - **2.7 km corridor survey, both directions:** 2,699 sampled frames plus 11,706 native-rate frames, 171 unreviewed candidate tracks. Both pothole locations reported by the rider were recovered in both travel directions ([adaptive sampling write-up](docs/adaptive-sampling.md), [data](docs/evaluation/eccup-corridor-survey.json)).
 - **Distance sampling with targeted refinement** used 20–31% fewer SAM inferences than scanning every native frame.
@@ -51,6 +51,7 @@ All results come from real Garmin Varia Vue footage of a rural lane near Eccup, 
 - **Approximate size:** RoadLens projects each SAM mask onto a flat-road camera model to estimate the hazard's footprint on the road, with a range. The rider-reported pothole comes out at ≈ 60 × 15 cm from the local mask and ≈ 65 × 15 cm from hosted masks (an earlier hand-annotated estimate was ≈ 59 × 13 cm). The camera geometry was measured from the bike and independently matched, to within 1 %, by a kinematic fit of SAM tracks against Garmin speed ([data](docs/evaluation/size-estimation-eccup-2026-11-03.json)).
 - **Beyond potholes:** the prompt is free text, but this footage has no other static hazard to show. On the same corridor, "standing water" and "road debris" returned nothing, "manhole cover" and "drain grate" landed on potholes under the wrong name, and "cracked asphalt" segmented the whole road ([development log](docs/development-log.md)). Every hit goes to triage and a person, whatever its label.
 - **Real time, edge versus hosted:** per-frame detection runs at 2.2 fps on a Jetson AGX Orin at SAM 3's native 1008 px and 4.3 fps at 672 px with the same detections; camera resolution barely matters, because the model resizes every frame. Hosted image requests reach about 30 fps with 48 in flight, but each result is about 1 s old and costs 12.5 times as much per frame as video mode, which itself takes finished clips and runs slower than the footage. That suits slow machinery such as forklifts, tractors and robots on the edge, and live hazard logging on a bike, but not a motorway car ([development log](docs/development-log.md#real-time-limits-edge-versus-hosted), [benchmarks](benchmarks/realtime/README.md)).
+- **Tesla dashcam as a second camera (4 November):** RoadLens reads the GPS and speed a Tesla writes into every dashcam frame while driving, so car footage works like the bike camera. On two passes along the same corridor, the rear camera and the repeater on the pothole's side of the car found candidates within 1–14 m of all three spots the rider photographed that day (best score per spot 0.63–0.76). Which repeater sees a pothole flips with the direction of travel, so both are scanned. Checked by eye, some masks sit on the pothole and some on a nearby patch. Sizes are not yet estimated for Tesla cameras ([development log](docs/development-log.md#tesla-on-the-eccup-corridor), [data](docs/evaluation/tesla-eccup-2026-11-04.json)).
 
 These are qualitative results on one road. No recall or precision figure is claimed. Sizes are camera-geometry estimates of the surface footprint, not tape measurements, and depth is never estimated.
 
@@ -66,6 +67,7 @@ These are qualitative results on one road. No recall or precision figure is clai
 | Meta Model API: hosted SAM 3.1 and Muse Spark 1.3 triage | Run live on real footage (3 November) |
 | Approximate size estimation | Run on real local and hosted masks; agrees across both and with the earlier manual estimate; not yet checked against a tape measure |
 | Real-time detection, Jetson AGX Orin and hosted API | Benchmarked on 10 real frames (3 November); no live camera mode is built |
+| Tesla dashcam telemetry and local scan | Run on 12 real Eccup corridor clips, rear and both repeaters (4 November); sizes not available for Tesla cameras |
 
 ## Requirements
 
@@ -89,6 +91,8 @@ export ROADLENS_PMTILES=/path/to/united-kingdom.pmtiles
 
 Overlay multi-clip Garmin GPS tracks on local OpenStreetMap tiles, click two points along a road fragment (or search by street name, ride offset, or wall-clock time), run targeted SAM 3.1 + VLM triage, confirm/reject candidate overlays, edit the drafted Markdown report, and export confirmed GeoJSON:
 
+Studio indexes Garmin rides only for now; scan Tesla clips with `roadlens scan` (below) and open the output directory in Studio for review.
+
 ```bash
 uv run roadlens studio /path/to/garmin-ride-folder \
   --pmtiles /path/to/united-kingdom.pmtiles \
@@ -99,13 +103,21 @@ Open `http://127.0.0.1:8766`. You can also drag-and-drop a `.MP4` clip into the 
 
 ### 2. Distance-Sampled Local SAM 3.1 Scan (`roadlens scan`)
 
-Select a sharp nearby frame approximately every metre using integrated Garmin speed, retain native source resolution and presentation timestamps, and revisit from 10 m before to 15 m after each coarse candidate at about one frame per 0.25 m (close to native frame rate when riding). Stops cost one frame, not two a second:
+Select a sharp nearby frame approximately every metre using integrated camera speed (Garmin or Tesla), retain native source resolution and presentation timestamps, and revisit from 10 m before to 15 m after each coarse candidate at about one frame per 0.25 m (close to native frame rate when riding). Stops cost one frame, not two a second:
 
 ```bash
 uv run roadlens scan /path/to/GRMS0010.MP4 \
   --prompt pothole \
   --start 150 --duration 210 --spacing 1 \
   --output artifacts/eccup-distance
+```
+
+Tesla dashcam files work the same way: RoadLens reads the GPS and speed the car writes into every frame while it is in gear. Scan the rear camera and both side repeaters, since the repeater on the pothole's side changes with the direction of travel. `--duration` defaults to 10 s, so pass the clip length. Sizes are reported unavailable until a Tesla camera is calibrated, and rear-camera frames show the registration plate, so crop them before sharing.
+
+```bash
+uv run roadlens scan /path/to/TeslaCam/SavedClips/<event>/<time>-back.mp4 \
+  --prompt pothole --duration 59 \
+  --output artifacts/tesla-back
 ```
 
 - `--prompt` accepts any text concept (default `pothole`, e.g. `"fallen tree branch"`, `"flooding"`).
@@ -153,7 +165,7 @@ uv run roadlens analyze /path/to/GRMS0010.MP4 \
   --output artifacts/eccup
 ```
 
-Extract timed Garmin GPS telemetry only:
+Extract timed Garmin or Tesla GPS telemetry only:
 
 ```bash
 uv run roadlens telemetry /path/to/GRMS0010.MP4 \

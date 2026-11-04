@@ -193,6 +193,8 @@ def select_frames(
             continue
         if stopped[i]:
             heartbeat = motion.stop_heartbeat_seconds
+            if i <= indices[-1]:
+                continue  # Sharpness look-ahead already took this stop frame.
             if not stopped[i - 1]:
                 indices.append(i)
                 reasons.append("stopped")

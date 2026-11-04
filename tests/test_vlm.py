@@ -261,12 +261,28 @@ def test_triage_max_candidates_zero_and_negative(tmp_path):
     summary = triage_run_directory(tmp_path, backend, max_candidates=0)
     assert summary["triaged_candidates"] == 0
     assert backend.triaged == [] and backend.drafted is None
-    assert "Review Counts" in (tmp_path / "summary-report.md").read_text()
+    report = (tmp_path / "summary-report.md").read_text()
+    assert "0 confirmed · 0 unreviewed · 0 rejected" in report
+    assert "Candidate #" not in report
 
     triage_run_directory(tmp_path, backend, max_candidates=1)
     assert backend.triaged == [0] and len(backend.drafted) == 1
     with pytest.raises(ValueError, match="nonnegative"):
         triage_run_directory(tmp_path, backend, max_candidates=-1)
+
+
+@pytest.mark.parametrize("limit", [0, 1, 2])
+def test_deterministic_report_uses_the_triage_selection(tmp_path, limit):
+    _write_two_candidate_run(tmp_path)
+    backend = _RecordingBackend()
+    summary = triage_run_directory(
+        tmp_path, backend, max_candidates=limit, draft_with_vlm=False
+    )
+    report = (tmp_path / "summary-report.md").read_text()
+    assert f"0 confirmed · {limit} unreviewed · 0 rejected" in report
+    assert report.count("### Candidate #") == limit
+    assert len(backend.triaged) == summary["triaged_candidates"] == limit
+    assert summary["total_observations"] == 2
 
 
 def test_draft_prompt_separates_human_review_from_model_triage():
@@ -290,6 +306,51 @@ def test_draft_prompt_separates_human_review_from_model_triage():
     assert "human-confirmed / hazard_candidate" not in prompt
     assert "only a model opinion" in prompt
     assert '"confirmed": 1' in prompt and '"unreviewed": 1' in prompt
+    assert "coordinates are camera GPS positions" in prompt
+    assert "Garmin camera GPS" not in prompt
+
+
+def test_reports_group_candidates_by_their_own_pass_and_road():
+    observations = [
+        {
+            "object_id": index,
+            "review_status": "unreviewed",
+            "clip_name": clip,
+            "pass_index": pass_index,
+            "street_name": street,
+            "place_name": place,
+        }
+        for index, pass_index, clip, street, place in (
+            (0, 1, "one.mp4", "First Road", "First Place"),
+            (1, 2, "two.mp4", "Second Road", "Second Place"),
+            (2, 1, "one.mp4", "First Road", "First Place"),
+        )
+    ]
+    report = format_deterministic_summary_report(
+        observations, street_name="Wrong fallback road"
+    )
+    first_heading = "### Pass 1 · First Road, First Place · one.mp4"
+    second_heading = "### Pass 2 · Second Road, Second Place · two.mp4"
+    first_group, second_group = report.split(first_heading)[1].split(second_heading)
+    assert "Candidate #0" in first_group and "Candidate #2" in first_group
+    assert "Candidate #1" not in first_group
+    assert "Candidate #1" in second_group and "Candidate #0" not in second_group
+    assert "Wrong fallback road" not in report
+
+    prompts = []
+
+    def fake_transport(base_url, api_key, payload):
+        prompts.append(payload["messages"][0]["content"])
+        return {"choices": [{"message": {"content": "# Draft"}}]}
+
+    backend = RemoteVlmBackend(api_key="test-key", transport=fake_transport)
+    backend.draft_summary_report(observations)
+    prompt = prompts[0]
+    context = json.loads(prompt.split("Structured input:\n", 1)[1])
+    for original, sanitized in zip(observations, context["items"], strict=True):
+        for key in ("clip_name", "pass_index", "street_name", "place_name"):
+            assert sanitized[key] == original[key]
+    assert "group items by pass_index, clip_name, street_name and place_name" in prompt
 
 
 def test_remote_vlm_reserves_reasoning_tokens(monkeypatch):

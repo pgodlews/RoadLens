@@ -58,8 +58,27 @@ _PAGE = """<!doctype html>
 <script>
 const observations = __OBSERVATIONS__;
 // Keyed per run so decisions never leak between runs served at the same origin.
-const storageKey = 'roadlens-review-__RUN_ID__';
+const storageKey = 'roadlens-review-v2-__RUN_ID__';
 const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+function candidateKey(item) {
+  return JSON.stringify([item.object_id, item.best_frame_index, item.best_source_seconds]);
+}
+// The old key included the entire candidate list and stored statuses by object ID.
+const legacyKey = 'roadlens-review-__LEGACY_RUN_ID__';
+const legacy = JSON.parse(localStorage.getItem(legacyKey) || '{}');
+const reviewDecisions = __REVIEW_DECISIONS__;
+const importedDecisions = saved.studioDecisions || {};
+observations.forEach(item => {
+  const key = candidateKey(item);
+  if (!saved[key] && legacy[item.object_id]) saved[key] = legacy[item.object_id];
+  // Import changed Studio decisions while preserving subsequent browser reviews.
+  const status = reviewDecisions[item.object_id];
+  if (status && importedDecisions[key] !== status) saved[key] = status;
+  importedDecisions[key] = status;
+});
+saved.studioDecisions = importedDecisions;
+localStorage.setItem(storageKey, JSON.stringify(saved));
+function statusFor(item) { return saved[candidateKey(item)] || item.review_status; }
 const markers = new Map();
 const map = L.map('map', {zoomControl: true});
 const archive = new pmtiles.PMTiles('__TILE_URL__');
@@ -72,7 +91,6 @@ function esc(val) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
-function statusFor(item) { return saved[item.object_id] || item.review_status; }
 function updateExport() {
   const confirmed = observations.filter(item => statusFor(item) === 'confirmed').length;
   const button = document.getElementById('download');
@@ -81,7 +99,7 @@ function updateExport() {
 }
 function colour(status) { return status === 'confirmed' ? '#61ba73' : status === 'rejected' ? '#a25b52' : '#e8b44d'; }
 function setStatus(item, status) {
-  saved[item.object_id] = status;
+  saved[candidateKey(item)] = status;
   localStorage.setItem(storageKey, JSON.stringify(saved));
   const card = document.getElementById('card-' + item.object_id);
   card.className = 'card ' + status;
@@ -136,7 +154,7 @@ function download(onlyConfirmed) {
     type: 'FeatureCollection',
     metadata: {
       export_mode: onlyConfirmed ? 'human_confirmed_only' : 'full_audit',
-      location_note: 'Points are Garmin camera GPS positions, not surveyed defect coordinates.'
+      location_note: 'Points are camera GPS positions, not surveyed defect coordinates.'
     },
     features
   };
@@ -160,24 +178,37 @@ def generate_report(output_directory: Path, tile_url: str) -> Path:
     observations = json.loads(
         (output_directory / "observations.json").read_text(encoding="utf-8")
     )
-    for observation in observations:
+    decisions_path = output_directory / "review-decisions.json"
+    decisions = (
+        json.loads(decisions_path.read_text(encoding="utf-8"))
+        if decisions_path.is_file()
+        else {}
+    )
+    for index, observation in enumerate(observations):
+        key = str(int(observation.get("object_id", index)))
+        if key in decisions:
+            observation["review_status"] = decisions[key]
         evidence = f"overlay-{observation['best_frame_index']:06d}.png"
         observation["evidence"] = (
             evidence if (output_directory / evidence).is_file() else None
         )
     payload = json.dumps(observations).replace("</", "<\\/")
-    # Stable across VLM triage rewrites, distinct for different runs/results.
+    # Keep the run key stable when candidates are added; identify each separately.
+    run_path = str(output_directory.resolve())
+    run_id = hashlib.sha256(run_path.encode("utf-8")).hexdigest()[:16]
     identity = [
         [o.get("object_id"), o.get("best_frame_index"), o.get("best_source_seconds")]
         for o in observations
     ]
-    run_id = hashlib.sha256(
-        json.dumps([str(output_directory.resolve()), identity]).encode("utf-8")
+    legacy_run_id = hashlib.sha256(
+        json.dumps([run_path, identity]).encode("utf-8")
     ).hexdigest()[:16]
     # Substitute observation data last so its text cannot inject placeholders.
     page = (
         _PAGE.replace("__TILE_URL__", tile_url)
         .replace("__RUN_ID__", run_id)
+        .replace("__LEGACY_RUN_ID__", legacy_run_id)
+        .replace("__REVIEW_DECISIONS__", json.dumps(decisions).replace("</", "<\\/"))
         .replace("__OBSERVATIONS__", payload)
     )
     target = output_directory / "index.html"

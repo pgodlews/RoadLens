@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from argparse import Namespace
+from dataclasses import dataclass
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from roadlens.analysis import Observation
 from roadlens.pmtiles_roads import PmtilesStreetIndex
 from roadlens.report import parse_byte_range
 from roadlens.ride import (
@@ -38,6 +40,25 @@ from roadlens.vlm import (
 
 # Per-run index of detection boxes by source time, from the scan's frame log.
 _FRAME_BOXES: dict[Path, tuple[float, dict[float, list[list[float]]]]] = {}
+
+
+@dataclass(frozen=True)
+class _PassObservation(Observation):
+    """Keep each pass's location on both merged JSON and GeoJSON observations."""
+
+    clip_name: str
+    pass_index: int
+    street_name: str | None
+    place_name: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **super().to_dict(),
+            "clip_name": self.clip_name,
+            "pass_index": self.pass_index,
+            "street_name": self.street_name,
+            "place_name": self.place_name,
+        }
 
 
 def _frame_log_boxes(run_dir: Path) -> dict[float, list[list[float]]]:
@@ -368,6 +389,7 @@ STUDIO_HTML = """<!doctype html>
       </div>
       <div id="reportSection" style="display:none; flex-direction:column; gap:8px">
         <label class="field" for="reportEditor">Summary report draft · check before any manual council / FixMyStreet submission</label>
+        <div id="reportStaleNote" class="muted" role="status" hidden>Review decisions changed. This draft is stale; redraft it before using it.</div>
         <textarea id="reportEditor"></textarea>
         <div class="row">
           <button id="saveReportBtn">Save draft</button>
@@ -843,6 +865,7 @@ function renderQueue() {
 function renderRun(run) {
   run.ordered = sortedObservations(run);
   activeRun = run;
+  markReportStale(Boolean(run.summary_report_stale));
   candidateLayer.clearLayers();
   candidateMarkers.clear();
   const bounds = [];
@@ -1024,12 +1047,20 @@ document.querySelectorAll('.view-toggle button').forEach(btn => {
   };
 });
 
+function markReportStale(stale) {
+  activeRun.summary_report_stale = stale;
+  document.getElementById('reportStaleNote').hidden = !stale;
+  document.getElementById('draftReportBtn').textContent = stale ? 'Redraft report (decisions changed)' : 'Draft report';
+}
+
 async function setDecision(item, status) {
   const res = await api('/api/runs/' + activeRun.run_id + '/review', {
     method: 'POST',
     body: JSON.stringify({object_id: item.object_id, review_status: status})
   });
+  const changed = item.review_status !== res.review_status;
   item.review_status = res.review_status;
+  if (changed && document.getElementById('reportEditor').value) markReportStale(true);
   if (candidateMarkers.has(item.object_id)) {
     candidateMarkers.get(item.object_id).setStyle({fillColor: markerColour(status)});
     candidateMarkers.get(item.object_id).setTooltipContent('#' + esc(item.object_id) + ' · ' + esc(status));
@@ -1081,6 +1112,8 @@ document.getElementById('draftReportBtn').onclick = async () => {
   });
   document.getElementById('reportSection').style.display = 'flex';
   document.getElementById('reportEditor').value = res.summary_report;
+  activeRun.summary_report = res.summary_report;
+  markReportStale(false);
 };
 
 document.getElementById('saveReportBtn').onclick = async () => {
@@ -1119,7 +1152,7 @@ function downloadGeojson(onlyConfirmed) {
     type: 'FeatureCollection',
     metadata: {
       export_mode: onlyConfirmed ? 'human_confirmed_only' : 'full_audit',
-      location_note: 'Points are Garmin camera GPS positions, not surveyed defect coordinates.'
+      location_note: 'Points are camera GPS positions, not surveyed defect coordinates.'
     },
     features
   };
@@ -1230,6 +1263,11 @@ class StudioState:
             "run_dir": str(run_dir),
             "observations": enriched,
             "summary_report": summary_report,
+            "summary_report_stale": bool(
+                summary_report
+                and decisions_path.is_file()
+                and decisions_path.stat().st_mtime_ns > report_path.stat().st_mtime_ns
+            ),
         }
 
     def update_review_decision(
@@ -1245,6 +1283,8 @@ class StudioState:
                 if decisions_path.is_file()
                 else {}
             )
+            if decisions.get(str(int(object_id))) == review_status:
+                return review_status
             decisions[str(int(object_id))] = review_status
             decisions_path.write_text(
                 json.dumps(decisions, indent=2) + "\n", encoding="utf-8"
@@ -1273,7 +1313,6 @@ def _execute_targeted_job(
 ) -> None:
     try:
         from roadlens.analysis import (
-            Observation,
             build_observations,
             write_observations,
         )
@@ -1378,7 +1417,8 @@ def _execute_targeted_job(
                         dets = result.get("detections") or []
                         own = [d for d in dets if d.get("object_id") == item["object_id"]]
                         result["detections"] = [
-                            {**d, "object_id": new_id} for d in (own or dets[:1])
+                            {**d, "object_id": new_id}
+                            for d in (own or (dets if len(dets) == 1 else []))
                         ]
                         (job_dir / f"result-{new_id:06d}.json").write_text(
                             json.dumps(result, indent=2) + "\n", encoding="utf-8"
@@ -1386,7 +1426,7 @@ def _execute_targeted_job(
                     from datetime import datetime
 
                     merged_obs.append(
-                        Observation(
+                        _PassObservation(
                             object_id=new_id,
                             prompt=item["prompt"],
                             backend=item["backend"],
@@ -1400,6 +1440,10 @@ def _execute_targeted_job(
                             latitude=item["latitude"],
                             longitude=item["longitude"],
                             location_source=item["location_source"],
+                            clip_name=clip_path.name,
+                            pass_index=seg.get("pass_index", p_idx + 1),
+                            street_name=seg.get("street_name"),
+                            place_name=seg.get("place_name"),
                         )
                     )
 
@@ -1417,8 +1461,8 @@ def _execute_targeted_job(
         except Exception:
             pass
 
-        street = street_names[0] if street_names else None
-        place = place_names[0] if place_names else None
+        street = street_names[0] if len(passes) == 1 and street_names else None
+        place = place_names[0] if len(passes) == 1 and place_names else None
         if vlm_mode in ("local", "remote"):
             state.jobs[job_id]["progress"] = f"Running {vlm_mode} VLM triage & report..."
             with create_vlm_backend(vlm_mode) as vlm_backend:

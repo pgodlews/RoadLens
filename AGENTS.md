@@ -28,6 +28,9 @@ uv run ruff check .
 - **Tesla dashcam clips** live on the rider's NAS and carry GPS for every
   drive, including home. Keep them and anything derived from them local
   unless the rider approves a specific stretch.
+- **Tesla rear-camera frames show the registration plate:** crop above the
+  bumper, or mask the plate and bumper twice over, before any rear-camera
+  image is published or sent to a hosted API, and check the result by eye.
 - **Never mark a candidate confirmed or rejected in code,** and never submit
   anything to a council or other service. Model output stays `unreviewed`.
 - **Delete hosted uploads** (`DELETE /v1/files/{id}`) once a request is done.

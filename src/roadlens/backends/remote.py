@@ -32,8 +32,9 @@ LINK_IOU = 0.3
 class RemoteSamBackend:
     name = "remote"
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, *, legacy_stitch: bool = False):
         self._api_key = api_key or os.environ.get("MODEL_API_KEY")
+        self._legacy_stitch = legacy_stitch
         if not self._api_key:
             raise RuntimeError("MODEL_API_KEY is required for the remote backend")
 
@@ -49,7 +50,8 @@ class RemoteSamBackend:
             raise ValueError("The segmentation prompt cannot be empty")
         metadata = probe_video(video_path)
         width, height = metadata["width"], metadata["height"]
-        total = math.ceil(metadata["duration"] * metadata["fps"] - 1e-6)
+        source_total = math.ceil(metadata["duration"] * metadata["fps"] - 1e-6)
+        total = source_total
         if max_frames is not None:
             total = min(total, max_frames)
         chunk_frames = int(
@@ -57,7 +59,13 @@ class RemoteSamBackend:
         )
         spans = chunk_spans(total, chunk_frames, CHUNK_OVERLAP)
         if len(spans) == 1:
-            result = asyncio.run(self._request(video_path, prompt))
+            if total < source_total:
+                with tempfile.TemporaryDirectory(prefix="roadlens-remote-") as tmp:
+                    path = Path(tmp) / "chunk-000.mp4"
+                    cut_frame_range(video_path, path, 0, total)
+                    result = asyncio.run(self._request(path, prompt))
+            else:
+                result = asyncio.run(self._request(video_path, prompt))
             frames = list(
                 self._convert_result(result, prompt, width, height, max_frames)
             )
@@ -77,7 +85,12 @@ class RemoteSamBackend:
             frames = list(self._convert_result(result, prompt, width, height, count))
             _warn_if_capped(frames, index, len(spans))
             chunks.append(frames)
-        yield from stitch_chunks(chunks, [start for start, _ in spans], CHUNK_OVERLAP)
+        yield from stitch_chunks(
+            chunks,
+            [start for start, _ in spans],
+            CHUNK_OVERLAP,
+            legacy_stitch=self._legacy_stitch,
+        )
 
     async def _request_all(self, paths: Sequence[Path], prompt: str) -> list[Any]:
         gate = asyncio.Semaphore(MAX_CONCURRENT_CHUNKS)
@@ -227,15 +240,20 @@ def stitch_chunks(
     chunks: Sequence[Sequence[FrameSegmentations]],
     starts: Sequence[int],
     overlap: int,
+    *,
+    legacy_stitch: bool = False,
 ) -> Iterator[FrameSegmentations]:
     """Join per-chunk results into one clip, with object ids unique across it.
 
-    Each chunk's first ``overlap`` frames were already emitted by the previous
-    chunk; there, an object that overlaps a previous-chunk mask keeps that
-    object's id, so a pothole crossing a boundary stays one candidate.
+    Shared frames retain both chunks' detections, except same-frame mask
+    duplicates. Matching tracks keep their ids beyond the overlap. Results
+    are merged before emission so each source frame is yielded once, in order.
+    ``legacy_stitch`` restores dropping all later-chunk overlap frames,
+    including objects that the previous chunk's session cap may have hidden.
     """
     next_id = 0
     shared: dict[int, tuple[Detection, ...]] = {}
+    combined: dict[int, FrameSegmentations] = {}
     for index, (frames, start) in enumerate(zip(chunks, starts, strict=True)):
         best: dict[int, tuple[float, int]] = {}
         for frame in frames:
@@ -248,24 +266,45 @@ def stitch_chunks(
                         best[detection.object_id] = (iou, earlier.object_id)
         ids = {local: linked for local, (_, linked) in best.items()}
         next_start = starts[index + 1] if index + 1 < len(starts) else None
+        earlier_frames = shared
         shared = {}
         for frame in frames:
-            if index > 0 and frame.frame_index < overlap:
+            if legacy_stitch and index > 0 and frame.frame_index < overlap:
                 continue
+            global_index = start + frame.frame_index
+            earlier_detections = earlier_frames.get(global_index, ())
             detections = []
             for detection in frame.detections:
+                if not legacy_stitch and any(
+                    _mask_iou(detection.mask, earlier.mask) >= LINK_IOU
+                    for earlier in earlier_detections
+                ):
+                    continue
                 if detection.object_id not in ids:
                     ids[detection.object_id] = next_id
                     next_id += 1
                 detections.append(
                     replace(detection, object_id=ids[detection.object_id])
                 )
-            global_index = start + frame.frame_index
+            if not legacy_stitch and global_index in combined:
+                detections = [*combined[global_index].detections, *detections]
             if next_start is not None and global_index >= next_start:
                 shared[global_index] = tuple(detections)
-            yield replace(
+            merged = replace(
                 frame, frame_index=global_index, detections=tuple(detections)
             )
+            if legacy_stitch:
+                yield merged
+            else:
+                combined[global_index] = merged
+        if not legacy_stitch:
+            for frame_index in sorted(combined):
+                if next_start is None or frame_index < next_start:
+                    yield combined.pop(frame_index)
+            shared = {
+                frame_index: frame.detections
+                for frame_index, frame in combined.items()
+            }
 
 
 def _mask_iou(a: np.ndarray, b: np.ndarray) -> float:

@@ -203,6 +203,11 @@ def test_resolve_by_ride_offset_and_wall_clock_reverse_geocodes_street(synthetic
     _, ride, geocoder = synthetic_ride
     assert parse_ride_offset("15 minutes 30 seconds") == pytest.approx(930.0)
     assert parse_ride_offset("15:30") == pytest.approx(930.0)
+    assert parse_ride_offset("1h, 5m and 30s") == pytest.approx(3930.0)
+    assert parse_ride_offset("20m") == pytest.approx(1200.0)
+    for text in ("20 miles", "20 minutes ago", "about 20 minutes"):
+        with pytest.raises(ValueError):
+            parse_ride_offset(text)
 
     # 15m (900s) into ride is ~298s into GRMS0011.MP4, on Sample Moor Road (-1.530)
     by_offset = resolve_by_ride_offset(

@@ -470,9 +470,12 @@ def parse_ride_offset(spec: str | float | int) -> float:
         return hours * 3600.0 + minutes * 60.0 + seconds
     pattern = re.compile(
         r"(\d+(?:\.\d+)?)\s*(hours?|hrs?|hr|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)"
+        r"(?![a-z])"
     )
     matches = list(pattern.finditer(text))
-    if not matches:
+    # Every word must be a duration part, so "20 miles" is refused, not 20 minutes.
+    leftover = re.sub(r"\band\b|[\s,]", "", pattern.sub("", text))
+    if not matches or leftover:
         raise ValueError(f"Could not parse ride offset: {spec!r}")
     total = 0.0
     for match in matches:

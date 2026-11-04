@@ -68,8 +68,9 @@ flowchart TB
 ```
 
 Scans, clip passes and Studio jobs all size their candidates with
-`sizing.py`. Everything except the optional Meta Model API backends (dashed)
-runs offline on the rider's machine.
+`sizing.py`. Processing, street lookup and models run on the rider's machine
+except the optional Meta Model API backends (dashed). The Studio and report
+pages load their map and font libraries from public CDNs.
 
 ## Modules
 
@@ -162,13 +163,15 @@ stateDiagram-v2
     Exported --> [*]
 ```
 
-No code path moves a candidate out of `Unreviewed`; triage labels are advice
-shown next to the evidence.
+No automated code path moves a candidate out of `Unreviewed`; only a person
+reviewing in Studio or the report does. Triage labels are advice shown next to
+the evidence.
 
 ## Design decisions
 
 - **Unreviewed until a person says otherwise:** model output never sets
-  `review_status`; exports contain confirmed candidates only, and nothing is
+  `review_status`; the council-ready export contains confirmed candidates only
+  (full-audit files are labelled as such), and nothing is
   submitted anywhere automatically.
 - **Camera positions, not defect positions:** locations are labelled as the
   camera's GPS fix at the best frame.
@@ -181,11 +184,13 @@ shown next to the evidence.
   deletes them afterwards, and splits long clips into 200-frame chunks
   because a hosted session stops adding objects after 16.
 - **Triage sees texture, not overlays:** the VLM gets the raw frame plus an
-  unmasked 1:1 crop, because coloured masks hid the asphalt and misled it.
+  unmasked close-up (resized, not 1:1), because coloured masks hid the asphalt
+  and misled it.
 - **Sizes are estimates:** footprints come from a flat-road camera model with
   a range; depth is never estimated.
-- **Offline by default:** street lookup reads a local PMTiles file; only the
-  optional hosted backends call the network.
+- **Local by default:** street lookup reads a local PMTiles file and models
+  run locally; the optional hosted backends call the Meta Model API, and the
+  Studio and report pages load map and font libraries from public CDNs.
 
 ## Further reading
 

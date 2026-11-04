@@ -474,6 +474,10 @@ class BaseVlmBackend:
                     "prompt": obs.get("prompt"),
                     "review_status": obs.get("review_status", "unreviewed"),
                     "best_source_seconds": obs.get("best_source_seconds"),
+                    "clip_name": obs.get("clip_name"),
+                    "pass_index": obs.get("pass_index"),
+                    "street_name": obs.get("street_name"),
+                    "place_name": obs.get("place_name"),
                     "sam_score": obs.get("score"),
                     "latitude": obs.get("latitude"),
                     "longitude": obs.get("longitude"),
@@ -501,7 +505,7 @@ class BaseVlmBackend:
             "Strict rules:\n"
             "1. Begin with a clear notice that this is a DRAFT requiring human review "
             "and manual submission (never auto-submitted).\n"
-            "2. State clearly that any coordinates are Garmin camera GPS positions at "
+            "2. State clearly that any coordinates are camera GPS positions at "
             "the moment of capture, not surveyed defect coordinates.\n"
             "3. Never invent physical depth, width, or legal severity ratings. "
             "If an item has a `size_estimate` string, you may quote it verbatim as "
@@ -513,7 +517,10 @@ class BaseVlmBackend:
             "5. Group items by review_status first (confirmed, then unreviewed; omit "
             "rejected items except in a count). Within unreviewed items, label the "
             "VLM classification as 'model triage' and list hazard_candidate before "
-            "sealed_repair, surface_debris_or_stain, and uncertain.\n\n"
+            "sealed_repair, surface_debris_or_stain, and uncertain.\n"
+            "6. Within each review status, group items by pass_index, clip_name, "
+            "street_name and place_name. Use each item's road and place when "
+            "supplied; never apply the first pass's road to other passes.\n\n"
             f"Structured input:\n{json.dumps(context, indent=2)}"
         )
         body = self.chat_completion(
@@ -544,9 +551,21 @@ def format_deterministic_summary_report(
     query_summary: str | None = None,
 ) -> str:
     """Fallback deterministic Markdown report requiring zero VLM/GPU calls."""
-    location_label = (
+    default_location = (
         ", ".join(p for p in (street_name, place_name) if p) or "Unspecified road"
     )
+
+    def location_for(obs: dict[str, Any]) -> str:
+        """Per-pass locations override the single-run context, even if unnamed."""
+        if "street_name" not in obs and "place_name" not in obs:
+            return default_location
+        return (
+            ", ".join(p for p in (obs.get("street_name"), obs.get("place_name")) if p)
+            or "Unspecified road"
+        )
+
+    location_label = "; ".join(dict.fromkeys(map(location_for, observations)))
+    location_label = location_label or default_location
     confirmed = [o for o in observations if o.get("review_status") == "confirmed"]
     unreviewed = [o for o in observations if o.get("review_status") == "unreviewed"]
     rejected = [o for o in observations if o.get("review_status") == "rejected"]
@@ -582,37 +601,55 @@ def format_deterministic_summary_report(
     lines.append("")
     if not target_list:
         lines.append("No confirmed or pending hazard candidates in this selection.")
+    groups: dict[tuple[Any, Any, str], list[dict[str, Any]]] = {}
     for obs in target_list:
-        oid = obs.get("object_id")
-        concept = obs.get("prompt", "hazard")
-        sec = obs.get("best_source_seconds")
-        lat, lon = obs.get("latitude"), obs.get("longitude")
-        coord = (
-            f"{lat:.5f}, {lon:.5f} (camera GPS)"
-            if isinstance(lat, int | float) and isinstance(lon, int | float)
-            else "unavailable"
-        )
-        triage = obs.get("vlm_triage") or {}
-        desc = (
-            triage.get("visual_description")
-            or "Visual overlay attached for human inspection."
-        )
-        lane = triage.get("lane_position")
-        cls = triage.get("classification")
-        lines.append(f"### Candidate #{oid} — {concept}")
-        if sec is not None:
-            lines.append(f"- **Clip offset:** {float(sec):.2f} s")
-        lines.append(f"- **Camera GPS:** {coord}")
-        if cls:
-            conf_str = triage.get("confidence", "low")
-            lines.append(f"- **VLM triage:** `{cls}` (confidence: `{conf_str}`)")
-        if lane:
-            lines.append(f"- **Position:** {lane}")
-        size = _size_for_report(obs)
-        if size:
-            lines.append(f"- **Approx. size (camera geometry estimate):** {size}")
-        lines.append(f"- **Observation:** {desc}")
-        lines.append("")
+        key = (obs.get("pass_index"), obs.get("clip_name"), location_for(obs))
+        groups.setdefault(key, []).append(obs)
+    for (pass_index, clip_name, location), items in groups.items():
+        candidate_heading = "###"
+        if pass_index is not None or clip_name or len(groups) > 1:
+            label = " · ".join(
+                str(part)
+                for part in (
+                    f"Pass {pass_index}" if pass_index is not None else None,
+                    location,
+                    clip_name,
+                )
+                if part
+            )
+            lines.extend([f"### {label}", ""])
+            candidate_heading = "####"
+        for obs in items:
+            oid = obs.get("object_id")
+            concept = obs.get("prompt", "hazard")
+            sec = obs.get("best_source_seconds")
+            lat, lon = obs.get("latitude"), obs.get("longitude")
+            coord = (
+                f"{lat:.5f}, {lon:.5f} (camera GPS)"
+                if isinstance(lat, int | float) and isinstance(lon, int | float)
+                else "unavailable"
+            )
+            triage = obs.get("vlm_triage") or {}
+            desc = (
+                triage.get("visual_description")
+                or "Visual overlay attached for human inspection."
+            )
+            lane = triage.get("lane_position")
+            cls = triage.get("classification")
+            lines.append(f"{candidate_heading} Candidate #{oid} — {concept}")
+            if sec is not None:
+                lines.append(f"- **Clip offset:** {float(sec):.2f} s")
+            lines.append(f"- **Camera GPS:** {coord}")
+            if cls:
+                conf_str = triage.get("confidence", "low")
+                lines.append(f"- **VLM triage:** `{cls}` (confidence: `{conf_str}`)")
+            if lane:
+                lines.append(f"- **Position:** {lane}")
+            size = _size_for_report(obs)
+            if size:
+                lines.append(f"- **Approx. size (camera geometry estimate):** {size}")
+            lines.append(f"- **Observation:** {desc}")
+            lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -1028,7 +1065,7 @@ def triage_run_directory(
         )
     else:
         report_md = format_deterministic_summary_report(
-            reviewed(observations),
+            reviewed(selected),
             street_name=street_name,
             place_name=place_name,
         )

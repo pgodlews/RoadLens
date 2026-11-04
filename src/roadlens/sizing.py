@@ -243,6 +243,32 @@ def geometry_for(telemetry_source: str) -> CameraGeometry | None:
     return GARMIN_VARIA_VUE if telemetry_source == "garmin" else None
 
 
+_SOURCE_BY_LOCATION = {"garmin_camera_gps": "garmin", "tesla_camera_gps": "tesla_sei"}
+
+
+def run_telemetry_source(run_dir: Path) -> str:
+    """Which camera a saved run came from, so re-sizing never borrows Garmin numbers.
+
+    Scans record it in scan.json; analyze runs only label observation positions.
+    Runs from before Tesla support carry neither and were all Garmin.
+    """
+    manifest = run_dir / "scan.json"
+    if manifest.is_file():
+        source = json.loads(manifest.read_text()).get("telemetry_source")
+        if source:
+            return source
+    observations = run_dir / "observations.json"
+    if observations.is_file():
+        items = json.loads(observations.read_text())
+        labels = {item.get("location_source") for item in items}
+        labels &= set(_SOURCE_BY_LOCATION)
+        if len(labels) == 1:
+            return _SOURCE_BY_LOCATION[labels.pop()]
+        if labels:
+            return "mixed"
+    return "garmin"
+
+
 def annotate_run_sizes(
     run_dir: Path, geometry: CameraGeometry | None = GARMIN_VARIA_VUE
 ) -> list[dict[str, Any]]:

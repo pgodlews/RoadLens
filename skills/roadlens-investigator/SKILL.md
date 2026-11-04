@@ -31,7 +31,7 @@ Run the built-in stdio MCP server (`roadlens mcp`) with your local OpenStreetMap
 }
 ```
 
-For remote VLM inference instead of local Muse Glimmer, set `MODEL_API_KEY` (Meta Model API, `muse-spark-1.3` by default) or point `ROADLENS_VLM_API_URL`, `ROADLENS_VLM_MODEL` and `ROADLENS_VLM_API_KEY` at another OpenAI-compatible endpoint, then pass `"vlm": "remote"` to VLM tools. Remote calls automatically mask the bottom Garmin burned-in GPS banner by default.
+For remote VLM inference instead of local Muse Glimmer, set `MODEL_API_KEY` (Meta Model API, `muse-spark-1.3` by default) or point `ROADLENS_VLM_API_URL`, `ROADLENS_VLM_MODEL` and `ROADLENS_VLM_API_KEY` at another OpenAI-compatible endpoint, then pass `"vlm": "remote"` to VLM tools. Remote calls mask the bottom Garmin burned-in GPS banner by default, except with the default road crop, which cuts at 94 % of frame height and can leave a thin strip of the banner; report drafts also send each candidate's coordinates as text.
 
 ## Core Investigation Workflows
 

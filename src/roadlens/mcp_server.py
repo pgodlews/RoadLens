@@ -59,7 +59,7 @@ DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 
 HUMAN_REVIEW_NOTICE = (
     "All candidates remain `review_status: unreviewed` and coordinates reflect "
-    "Garmin camera GPS (`camera_gps`), not surveyed defect positions. A human must "
+    "the camera's GPS (`camera_gps`), not surveyed defect positions. A human must "
     "visually confirm overlays in `roadlens studio` before exporting council GeoJSON."
 )
 
@@ -187,7 +187,8 @@ MCP_TOOLS: tuple[dict[str, Any], ...] = (
             "Run targeted SAM 3.1 distance-sampled video segmentation on a resolved "
             "clip window (`--prompt` e.g. 'pothole' or 'fallen tree branch'), "
             "saving candidate overlays and unreviewed `observations.json`. "
-            "Stops cost one frame unless `frame_efficient` is false."
+            "Stops cost one frame, then one every 10 s, unless `frame_efficient` "
+            "is false."
         ),
         "inputSchema": {
             "type": "object",

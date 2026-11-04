@@ -79,6 +79,11 @@ async def segment(client, prompt, part, fmt):
         parsed = parse_responses_stream(events, fmt)
         async with parsed:
             result = await parsed.final_result()
+    if result.outcome.status != "completed":
+        raise RuntimeError(f"Segmentation incomplete: {result.outcome}")
+    errors = [item.message for item in result.diagnostics if item.severity == "error"]
+    if errors:
+        raise RuntimeError("Invalid segmentation records: " + "; ".join(errors))
     scores = [
         round(r.confidence, 3)
         for r in result.records
@@ -87,7 +92,25 @@ async def segment(client, prompt, part, fmt):
     return time.perf_counter() - start, first, scores
 
 
+async def attempt_segment(client, prompt, part, fmt, failures, **context):
+    """Keep failed requests out of successful latency and throughput numbers."""
+    start = time.perf_counter()
+    try:
+        return await segment(client, prompt, part, fmt)
+    except Exception as error:
+        failures.append(
+            {
+                **context,
+                "error": f"{type(error).__name__}: {error}",
+                "elapsed_s": round(time.perf_counter() - start, 2),
+            }
+        )
+        return None
+
+
 def summary(latencies: list[float]) -> dict:
+    if not latencies:
+        return {"median_s": None, "p90_s": None, "min_s": None}
     latencies = sorted(latencies)
     return {
         "median_s": round(statistics.median(latencies), 2),
@@ -106,22 +129,39 @@ async def sequential_runs(client, frames, prompt, inputs):
     for size in inputs:
         urls = [jpeg_data_url(f, parse_size(size)) for f in frames]
         fmt = image_segmentation_format()
-        await segment(client, prompt, image_part(urls[0][0]), fmt)  # warm-up
+        failures = []
+        await attempt_segment(
+            client, prompt, image_part(urls[0][0]), fmt, failures, phase="warmup"
+        )
         latencies, firsts, found = [], [], []
-        for url, _ in urls:
-            seconds, first, scores = await segment(
-                client, prompt, image_part(url), image_segmentation_format()
+        for index, (url, _) in enumerate(urls):
+            result = await attempt_segment(
+                client,
+                prompt,
+                image_part(url),
+                image_segmentation_format(),
+                failures,
+                phase="measured",
+                request_index=index,
             )
+            if result is None:
+                continue
+            seconds, first, scores = result
             latencies.append(seconds)
-            firsts.append(first)
+            if first is not None:
+                firsts.append(first)
             found.append((len(scores), max(scores) if scores else None))
         run = {
             "mode": "image_sequential",
             "input": size,
             "jpeg_kb": round(statistics.mean(n for _, n in urls) / 1024),
             **summary(latencies),
-            "first_event_median_s": round(statistics.median(firsts), 2),
-            "fps": round(1 / statistics.median(latencies), 2),
+            "first_event_median_s": round(statistics.median(firsts), 2)
+            if firsts
+            else None,
+            "fps": round(1 / statistics.median(latencies), 2) if latencies else None,
+            "successes": len(latencies),
+            "failures": failures,
             "detections": found,
         }
         print(json.dumps(run), flush=True)
@@ -134,27 +174,33 @@ async def concurrent_runs(client, frames, prompt, size, levels, requests):
     runs = []
     for in_flight in levels:
         gate = asyncio.Semaphore(in_flight)
+        failures = []
 
-        async def one(i, gate=gate):
+        async def one(i, gate=gate, failures=failures):
             async with gate:
-                return await segment(
+                return await attempt_segment(
                     client,
                     prompt,
                     image_part(urls[i % len(urls)]),
                     image_segmentation_format(),
+                    failures,
+                    request_index=i,
                 )
 
         start = time.perf_counter()
         results = await asyncio.gather(*(one(i) for i in range(requests)))
         wall = time.perf_counter() - start
+        successes = [r for r in results if r is not None]
         run = {
             "mode": "image_concurrent",
             "input": size,
             "in_flight": in_flight,
             "requests": requests,
             "wall_s": round(wall, 1),
-            "throughput_fps": round(requests / wall, 2),
-            **summary([r[0] for r in results]),
+            "throughput_fps": round(len(successes) / wall, 2),
+            "successes": len(successes),
+            "failures": failures,
+            **summary([r[0] for r in successes]),
         }
         print(json.dumps(run), flush=True)
         runs.append(run)
@@ -182,12 +228,14 @@ async def video_runs(client, source, start_s, prompt, lengths, fps, width):
                 purpose="user_data",
             )
             upload_s = time.perf_counter() - begin
+            failures = []
             try:
-                segment_s, first, _ = await segment(
+                result = await attempt_segment(
                     client,
                     prompt,
                     {"type": "input_video", "file_id": uploaded.id},
                     video_segmentation_format(),
+                    failures,
                 )
             finally:
                 await client.files.delete(uploaded.id)
@@ -197,8 +245,18 @@ async def video_runs(client, source, start_s, prompt, lengths, fps, width):
             "frames": round(seconds * fps),
             "width": width,
             "upload_s": round(upload_s, 2),
+            "successes": int(result is not None),
+            "failures": failures,
+        }
+        if result is None:
+            print(json.dumps(run), flush=True)
+            runs.append(run)
+            continue
+        segment_s, first, _ = result
+        run = {
+            **run,
             "segment_s": round(segment_s, 2),
-            "first_event_s": round(first, 2),
+            "first_event_s": round(first, 2) if first is not None else None,
             "end_to_end_s": round(upload_s + segment_s, 2),
             "realtime_factor": round((upload_s + segment_s) / seconds, 2),
         }

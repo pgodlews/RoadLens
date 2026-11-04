@@ -147,6 +147,13 @@ def test_scan_audits_empty_frames_refines_and_exports_source_times(
     with pytest.raises(FileNotFoundError):
         run_scan(args, NoMoreInference)
     video.write_bytes(original)
+    # A manifest from before source signatures cannot vouch for the file.
+    saved = json.loads(manifest_path.read_text())
+    unsigned = {k: v for k, v in saved.items() if k != "source_signature"}
+    manifest_path.write_text(json.dumps(unsigned))
+    with pytest.raises(ValueError, match="no source signature"):
+        run_scan(args, NoMoreInference)
+    manifest_path.write_text(json.dumps(saved))
     args.spacing = 2
     with pytest.raises(ValueError, match="same scan settings"):
         run_scan(args, NoMoreInference)
@@ -175,7 +182,98 @@ def test_track_registry_only_merges_with_shared_visual_evidence(tmp_path):
     assert len(registry.merged()) == 3
 
 
+def test_placeholder_score_on_flat_crop_is_never_evidence(tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    path = tmp_path / "flat.png"
+    # A uniform frame has zero crop sharpness, so the old ranking gave the
+    # placeholder a quality of -0.0, which beat the starting value of -1.
+    cv2.imwrite(str(path), np.full((48, 64, 3), 128, dtype=np.uint8))
+    mask = np.ones((48, 64), dtype=bool)
+    box = (0.3, 0.3, 0.2, 0.2)
+    registry = TrackRegistry()
+    ids = {}
+
+    def add(time, score):
+        detection = Detection(5, box, score, mask)
+        frame = FrameSegmentations(0, "pothole", "local", (detection,))
+        registry.add(ids, frame, FrameChoice(time, 1, 1, 1, "test"), path, "test")
+
+    add(1.0, -10000.0)
+    (track,) = registry.merged()
+    assert track["best"] is None
+    add(2.0, 0.6)
+    (track,) = registry.merged()
+    assert track["best"]["detection"].score == 0.6
+
+
+def test_scan_skips_track_seen_only_with_sam_placeholder_score(
+    video, tmp_path, monkeypatch
+):
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    monkeypatch.setattr(
+        "roadlens.scan.probe_video",
+        lambda path: {
+            "creation_time": created.isoformat(),
+            "duration": 3,
+            "fps": 10,
+            "width": 64,
+            "height": 48,
+        },
+    )
+    samples = tuple(
+        TelemetrySample(created + timedelta(seconds=t), 53, -1, 4, t) for t in range(4)
+    )
+    monkeypatch.setattr(
+        "roadlens.scan.read_camera_telemetry", lambda path: TelemetryResult(samples, 0)
+    )
+
+    class Backend:
+        thresholds = {"output": 0.25, "detection": 0.25, "new_object": 0.35}
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def segment_video(self, path, prompt):
+            for index, _ in enumerate(sorted(path.glob("*.png"))):
+                real = np.zeros((48, 64), dtype=bool)
+                real[20:28, 25:35] = True
+                remembered = np.zeros((48, 64), dtype=bool)
+                remembered[2:6, 2:6] = True
+                detections = [
+                    Detection(1, (25 / 64, 20 / 48, 10 / 64, 8 / 48), 0.8, real)
+                ]
+                if index == 0:
+                    # SAM 3.1 returned -10000 for a remembered object on real
+                    # Tesla footage; it used to crash the scan with no best frame.
+                    detections.append(
+                        Detection(
+                            2, (2 / 64, 2 / 48, 4 / 64, 4 / 48), -10000.0, remembered
+                        )
+                    )
+                yield FrameSegmentations(index, prompt, "local", tuple(detections))
+
+    output = tmp_path / "scan"
+    args = build_parser().parse_args(
+        [
+            "scan",
+            str(video),
+            "--duration",
+            "1.5",
+            "--output",
+            str(output),
+            "--no-refine",
+        ]
+    )
+    result = run_scan(args, Backend)
+    assert result["status"] == "complete"
+    assert result["tracks_without_valid_score"] == 1
+    observations = json.loads((output / "observations.json").read_text())
+    assert [o["score"] for o in observations] == [0.8]
+
+
 def test_retried_interrupted_chunk_does_not_duplicate_ledger_rows(tmp_path):
+    pytest.importorskip("cv2")  # TrackRegistry.add reads frames with OpenCV
+
     class Backend:
         def __init__(self, fail_after=None):
             self.fail_after = fail_after
@@ -214,7 +312,46 @@ def test_retried_interrupted_chunk_does_not_duplicate_ledger_rows(tmp_path):
     assert len(keys) == len(set(keys)) == 4 + 3
 
 
+def test_torn_chunk_receipt_reruns_that_chunk_instead_of_blocking_resume(tmp_path):
+    pytest.importorskip("cv2")  # TrackRegistry.add reads frames with OpenCV
+
+    class Backend:
+        calls = 0
+
+        def segment_video(self, path, prompt):
+            Backend.calls += 1
+            for index, _ in enumerate(sorted(path.glob("*.png"))):
+                yield FrameSegmentations(index, prompt, "local", ())
+
+    choices = [FrameChoice(t, 1, t, 1, "test") for t in range(6)]
+    paths = [tmp_path / f"{i}.png" for i in range(6)]
+    for path in paths:
+        path.touch()
+
+    def run():
+        return run_pass(
+            Backend(), choices, paths, "coarse", tmp_path, TrackRegistry(), 4, 1
+        )
+
+    run()
+    receipts = tmp_path / "chunks.jsonl"
+    lines = receipts.read_text().splitlines()
+    # Interrupted while writing the last receipt: half a JSON line, no newline.
+    receipts.write_text(lines[0] + "\n" + lines[1][: len(lines[1]) // 2])
+    Backend.calls = 0
+    run()
+    assert Backend.calls == 1  # Only the chunk with the torn receipt reran.
+    rows = [json.loads(line) for line in receipts.read_text().splitlines()]
+    assert sorted(row["offset"] for row in rows) == [0, 3]
+    ledger_lines = (tmp_path / "frames.jsonl").read_text().splitlines()
+    ledger = [json.loads(line) for line in ledger_lines]
+    keys = [(row["chunk_offset"], row["frame_index"]) for row in ledger]
+    assert len(keys) == len(set(keys)) == 4 + 3
+
+
 def test_incomplete_backend_output_cannot_pass_as_complete_coverage(tmp_path):
+    pytest.importorskip("cv2")  # TrackRegistry.add reads frames with OpenCV
+
     class Backend:
         def segment_video(self, path, prompt):
             yield FrameSegmentations(0, prompt, "local", ())

@@ -65,6 +65,10 @@ def decode_mask(encoded: dict[str, Any]) -> NDArray[np.bool_]:
     width = int(encoded["width"])
     height = int(encoded["height"])
     counts = [int(count) for count in encoded["counts"]]
+    if width < 0 or height < 0:
+        raise ValueError("RLE mask dimensions cannot be negative")
+    if any(count < 0 for count in counts):
+        raise ValueError("RLE run lengths cannot be negative")
     if sum(counts) != width * height:
         raise ValueError("RLE counts do not match the mask dimensions")
     values = np.zeros(width * height, dtype=bool)

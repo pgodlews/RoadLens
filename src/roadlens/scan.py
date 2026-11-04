@@ -130,7 +130,10 @@ class TrackRegistry:
                 },
             )
             track["times"].add(timestamp)
-            if quality > track["quality"]:
+            # SAM 3.1 scores a remembered-but-undetected object -10000; such a
+            # frame is never evidence, even when a flat crop makes quality -0.0.
+            placeholder = detection.score is not None and detection.score < 0
+            if not placeholder and quality > track["quality"]:
                 track.update(
                     quality=quality,
                     best={
@@ -175,13 +178,17 @@ def run_pass(
     completed = {}
     chunk_path = output / "chunks.jsonl"
     if chunk_path.exists():
-        completed = {
-            row["offset"]: row
-            for row in (
-                json.loads(line) for line in chunk_path.read_text().splitlines()
-            )
-            if row["pass"] == name
-        }
+        receipts = []
+        for line in chunk_path.read_text().splitlines():
+            try:
+                receipts.append((line, json.loads(line)))
+            except json.JSONDecodeError:
+                continue  # A torn receipt means the chunk did not finish: rerun it.
+        completed = {row["offset"]: row for _, row in receipts if row["pass"] == name}
+        # Rewrite without the torn line so the next receipt is not glued onto it.
+        temporary = chunk_path.with_suffix(".tmp")
+        temporary.write_text("".join(f"{line}\n" for line, _ in receipts))
+        temporary.replace(chunk_path)
     cached = {}
     ledger_path = output / "frames.jsonl"
     if ledger_path.exists():
@@ -372,10 +379,12 @@ def run_scan(args, backend_factory=None):
             # Never return a completed manifest for a missing or replaced source.
             if not args.video.is_file():
                 raise FileNotFoundError(args.video)
-            if previous.get("source_signature") not in (
-                None,
-                _source_signature(args.video),
-            ):
+            if "source_signature" not in previous:
+                # Older manifests cannot prove the file is the one scanned.
+                raise ValueError(
+                    "Saved run has no source signature; rescan into a new directory"
+                )
+            if previous["source_signature"] != _source_signature(args.video):
                 raise ValueError("Source file changed since the saved run")
             return previous
     elif args.output.exists() and any(args.output.iterdir()):
@@ -613,7 +622,11 @@ def _run_scan(args, backend_factory=None):
         )
         timings.extend(fine_timings)
     observations, details = [], []
-    for identity, track in enumerate(registry.merged()):
+    # A track seen only with SAM 3.1's placeholder score (see TrackRegistry.add)
+    # has no evidence frame to show.
+    tracks = registry.merged()
+    evidenced = [track for track in tracks if track["best"] is not None]
+    for identity, track in enumerate(evidenced):
         best = track["best"]
         choice = best["choice"]
         recorded = created + timedelta(seconds=choice.source_seconds)
@@ -653,6 +666,7 @@ def _run_scan(args, backend_factory=None):
         status="complete",
         chunks=timings,
         observations=len(observations),
+        tracks_without_valid_score=len(tracks) - len(evidenced),
         wall_seconds=time.perf_counter() - started,
         total_inference_seconds=sum(t["inference_seconds"] for t in timings),
         inferred_frames_including_overlap=sum(t["frames"] for t in timings),
